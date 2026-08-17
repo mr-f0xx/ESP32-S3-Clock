@@ -73,7 +73,7 @@ constexpr uint16_t MAX_IDLE_SLEEP_MINUTES = 24 * 60;
 constexpr uint16_t MIN_BACKGROUND_SWITCH_MINUTES = 1;
 constexpr uint16_t MAX_BACKGROUND_SWITCH_MINUTES = 24 * 60;
 constexpr uint16_t DEFAULT_ALBUM_SWITCH_MINUTES = 30;
-constexpr uint16_t DEFAULT_WEATHER_SWITCH_MINUTES = 30;
+constexpr uint16_t DEFAULT_WEATHER_SWITCH_MINUTES = 5;
 constexpr uint8_t DEFAULT_ALBUM_IMAGE_LIMIT = 20;
 // One restrained accent family is shared by tiles, controls and weather icons.
 // Neutral black/white/grey surfaces intentionally remain unchanged.

@@ -18,7 +18,6 @@ __pycache__/
 
 # Large media: keep locally or publish with Git LFS / release archives
 media/source_mp4/
-tfcard/wallpaper/
 tfcard/video/
 tfcard/music/
 

@@ -4,9 +4,9 @@
 
 > ## 快速下载
 >
-> **[下载可直接烧录的 16 MB 固件](https://github.com/maxiumlee/ESP32-S3-LVGL-Clock/releases/latest/download/LVGL_Clock_16MB.merged.bin)** 　|　 **[下载乐鑫官方 Flash Download Tool](https://www.espressif.com/en/tools-type/flash-download-tools)**
+> **[下载 16 MB 固件](https://github.com/maxiumlee/ESP32-S3-LVGL-Clock/releases/latest/download/LVGL_Clock_16MB.merged.bin)** 　|　 **[浏览原始 JWP 天气壁纸](https://github.com/maxiumlee/ESP32-S3-LVGL-Clock/tree/main/tfcard/wallpaper)** 　|　 **[下载乐鑫官方烧录工具](https://www.espressif.com/en/tools-type/flash-download-tools)**
 >
-> 普通用户只需要以上两个文件，不需要安装 Arduino IDE、Python 或第三方烧录器。
+> 烧录只需要固件和官方工具；JWP 天气壁纸为可选下载，不需要安装 Arduino IDE、Python 或第三方烧录器。
 >
 > 天气视频素材网盘链接：https://drive.google.com/drive/folders/1uimT8YDarJMT8KugjhhC21ljjzA2iPPn?usp=sharing
 
@@ -40,7 +40,7 @@
 固件 SHA-256：
 
 ```text
-05025DBF66E8AA1E1AB77BD10612DC17F2C425D9F565F1553F11FA13DE05C644
+6557564C6859FBE129E36B43A6F6F7C870472E6F61734282894BD8819C090B3C
 ```
 
 Windows 校验命令：
@@ -71,6 +71,13 @@ Get-FileHash .\LVGL_Clock_16MB.merged.bin -Algorithm SHA256
 /music/                     MP3/WAV 音乐
 /video/                     MJPEG 视频及同名 WAV 音频
 /video/rotated/             竖屏预旋转视频
+```
+
+转换完成的 JWP 已按天气类型和屏幕方向保存在 [`tfcard/wallpaper`](tfcard/wallpaper)，并由 Git LFS 管理。需要完整下载源码和壁纸时先安装 Git LFS，再执行：
+
+```powershell
+git lfs install
+git clone https://github.com/maxiumlee/ESP32-S3-LVGL-Clock.git
 ```
 
 视频文件示例：
@@ -124,7 +131,7 @@ python -m pip install -r tools/wallpaper_builder/requirements.txt
 python tools/wallpaper_builder/build_playlist.py
 ```
 
-脚本读取 `media/source_mp4/*.mp4`，生成横屏和竖屏资源到 `tfcard/wallpaper`。大型 MP4、JWP、音乐和视频资源默认不提交到 GitHub，可通过 GitHub Releases 或其他存储单独发布。
+脚本读取 `media/source_mp4/*.mp4`，生成横屏和竖屏资源到 `tfcard/wallpaper`。转换完成的 JWP 通过 Git LFS 发布；大型源 MP4、音乐和普通视频不提交到仓库，可通过网盘或其他存储单独发布。
 
 ## 许可
 
