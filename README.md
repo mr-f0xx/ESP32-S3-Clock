@@ -4,7 +4,7 @@
 
 > ## 快速下载
 >
-> **[下载可直接烧录的 16 MB 固件](firmware/LVGL_Clock_16MB.merged.bin)** 　|　 **[下载乐鑫官方 Flash Download Tool](https://www.espressif.com/en/tools-type/flash-download-tools)**
+> **[下载可直接烧录的 16 MB 固件](https://github.com/maxiumlee/ESP32-S3-LVGL-Clock/releases/latest/download/LVGL_Clock_16MB.merged.bin)** 　|　 **[下载乐鑫官方 Flash Download Tool](https://www.espressif.com/en/tools-type/flash-download-tools)**
 >
 > 普通用户只需要以上两个文件，不需要安装 Arduino IDE、Python 或第三方烧录器。
 
