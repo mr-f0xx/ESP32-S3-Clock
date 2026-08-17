@@ -20,18 +20,18 @@
    | LoadMode | `UART` |
 
 3. 在烧录列表第一行选择 `LVGL_Clock_16MB.merged.bin`，勾选该行，地址填写 `0x0`。
-4. 设置烧录参数：
+4. 设置烧录参数（若可选）：
 
    | 参数 | 设置 |
    | --- | --- |
-   | SPI SPEED | `80MHz` |
+   | SPI SPEED | `40MHz` |
    | SPI MODE | `DIO` |
    | FLASH SIZE | `16MB` |
    | BAUD | `460800`（推荐） |
 
 5. 选择设备对应的 COM 口，点击 `START`。显示 `FINISH` 后再断开 USB。
 
-如果工具一直等待连接：按住开发板 `BOOT`，短按一次 `RESET`，松开 `BOOT` 后重新点击 `START`。
+如果工具一直等待连接：按住开发板 `BOOT`的同时，长按 `PWR`，等待设备重启后松手。
 
 > 这是完整 16 MB 镜像，会更新程序、分区及设备设置。重新烧录后需要再次配置 Wi-Fi 和天气。
 
@@ -50,7 +50,7 @@ Get-FileHash .\LVGL_Clock_16MB.merged.bin -Algorithm SHA256
 ## 2. 首次启动与配置
 
 1. 插入 FAT32 格式的 TF 卡并启动设备。
-2. 默认进入 App 选择界面第一页，打开 **Settings**。
+2. 默认进入 App 选择界面第一页，打开 灰色图标的**设置**。
 3. 手机或电脑连接设备创建的开放热点 `AMOLED-Clock-XXXXXX`，无需密码。
 4. 浏览器打开 `http://192.168.4.1`。
 5. 填写家庭 Wi-Fi 并保存。
