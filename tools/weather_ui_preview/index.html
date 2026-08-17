@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LVGL Weather UI Preview</title>
+  <style>
+    @font-face { font-family: MontserratLVGL; src: url("fonts/Montserrat-Medium.ttf") format("truetype"); font-weight: 500; }
+    @font-face { font-family: InterLVGL; src: url("fonts/Inter-Variable.ttf") format("truetype"); font-weight: 100 900; }
+    :root { --scale: 1; --screen: #141414; --card: #202020; --border: #3a3a3a; --muted: #9299a3; --soft: #cbd5e1; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; overflow-x: hidden; color: #e5e7eb; background: #0a0a0a; font-family: MontserratLVGL, sans-serif; }
+    .toolbar { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 56px; padding: 8px 18px; background: rgba(17,20,27,.96); border-bottom: 1px solid #292d38; }
+    button, select { height: 36px; padding: 0 14px; color: #e5e7eb; background: #222631; border: 1px solid #3a4050; border-radius: 9px; font: 500 14px MontserratLVGL, sans-serif; }
+    button.active { color: #081018; background: #7dd3fc; border-color: #7dd3fc; }
+    .hint { min-width: 0; margin-left: auto; color: #9299a3; font-size: 13px; }
+    .stage { display: flex; align-items: flex-start; gap: 24px; padding: 28px 24px 80px; }
+    .device { width: calc(480px * var(--scale)); height: calc(480px * var(--scale)); }
+    #screen { position: relative; width: 480px; height: 480px; overflow: hidden; transform: scale(var(--scale)); transform-origin: top left; color: white; background: var(--screen); user-select: none; touch-action: none; box-shadow: 0 18px 70px rgba(0,0,0,.58), 0 0 0 1px #242936; }
+    #screen.debug::after { content: ""; position: absolute; inset: 0; z-index: 30; pointer-events: none; background-image: linear-gradient(rgba(125,211,252,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(125,211,252,.12) 1px, transparent 1px), linear-gradient(rgba(125,211,252,.24) 1px, transparent 1px), linear-gradient(90deg, rgba(125,211,252,.24) 1px, transparent 1px); background-size: 10px 10px, 10px 10px, 50px 50px, 50px 50px; }
+    .page { position: absolute; inset: 0; display: none; }
+    .page.active { display: block; }
+    .label { position: absolute; overflow: hidden; white-space: nowrap; font-weight: 500; }
+    .m16 { font-size: 16px; line-height: 18px; } .m18 { font-size: 18px; line-height: 20px; } .m20 { font-size: 20px; line-height: 22px; }
+    .m22 { font-size: 22px; line-height: 24px; } .m28 { font-size: 28px; line-height: 30px; }
+    .m24 { font-size: 24px; line-height: 26px; } .m25 { font-size: 25px; line-height: 28px; }
+    .m32 { font-size: 32px; line-height: 35px; }
+    .inter52 { font: 500 52px/40px InterLVGL, sans-serif; letter-spacing: -.02em; }
+    .muted { color: var(--muted); } .soft { color: var(--soft); }
+    .ellipsis { text-overflow: ellipsis; }
+    .marquee { overflow: hidden; white-space: nowrap; }
+    .marquee > span { display: inline-block; min-width: 100%; padding-right: 48px; animation: marquee-x 10s linear infinite; }
+    @keyframes marquee-x { 0%, 12% { transform: translateX(0); } 88%, 100% { transform: translateX(-100%); } }
+    .center { text-align: center; } .right { text-align: right; }
+    .card { position: absolute; overflow: hidden; background: var(--card); border: 1px solid var(--border); border-radius: 24px; }
+    .divider { position: absolute; background: #4a4a4a; }
+    .icon { position: absolute; display: grid; place-items: center; color: #fff; }
+    .icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .icon img { display: block; width: 48px; height: 48px; object-fit: contain; }
+    .condition { color: #7dd3fc; }
+    .chart { position: absolute; overflow: visible; }
+    .chart .grid { stroke: #3a3a3a; stroke-width: 1; opacity: .7; }
+    .chart .line { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    .chart .point { stroke: var(--card); stroke-width: 2; }
+    .axis-label { position: absolute; color: var(--muted); font-size: 16px; line-height: 18px; }
+    .page-dots { position: absolute; left: 218px; top: 465px; display: flex; gap: 7px; }
+    .page-dots i { width: 18px; height: 4px; border-radius: 2px; background: #454545; }
+    .page-dots i.on { background: #fff; }
+    .swipe-flash { animation: flash .22s ease-out; }
+    @keyframes flash { from { opacity: .5; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+    #screen.editing [data-editable] { cursor: move; }
+    #screen.editing [data-selected="true"] { z-index: 12 !important; outline: 2px solid #fbbf24; outline-offset: 2px; }
+    .editor-panel { position: sticky; top: 84px; width: 340px; flex: 0 0 340px; padding: 18px; background: #11141b; border: 1px solid #2d3340; border-radius: 16px; box-shadow: 0 18px 60px rgba(0,0,0,.35); }
+    .editor-panel h2 { margin: 0 0 8px; font-size: 20px; }
+    .editor-note, #selectedPath { color: #9299a3; font-size: 13px; line-height: 1.5; }
+    #selectedName { min-height: 25px; margin: 12px 0 4px; color: #f8fafc; font-size: 17px; overflow-wrap: anywhere; }
+    .fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin: 14px 0; }
+    .fields label { display: grid; gap: 5px; color: #aab1bd; font-size: 12px; }
+    .fields input { width: 100%; height: 38px; padding: 0 10px; color: #fff; background: #1b1f29; border: 1px solid #394151; border-radius: 8px; font: 500 16px MontserratLVGL,sans-serif; }
+    .fields input:disabled { opacity: .35; }
+    .editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .editor-actions button { flex: 1 1 94px; }
+    #changeOutput { width: 100%; height: 150px; margin-top: 10px; resize: vertical; padding: 10px; color: #a7f3d0; background: #090c11; border: 1px solid #303746; border-radius: 9px; font: 12px/1.45 Consolas,monospace; }
+    .output-title { margin-top: 18px; font-size: 13px; color: #cbd5e1; }
+    @media (max-width: 920px) { .stage { flex-direction: column; } .editor-panel { position: static; width: 480px; flex-basis: auto; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="overviewBtn" class="active">当前天气</button>
+    <button id="trendBtn">趋势页面</button>
+    <button id="gridBtn">坐标网格</button>
+    <button id="editBtn" class="active">编辑模式</button>
+    <label>缩放 <select id="scaleSelect" aria-label="预览缩放"><option value="0.5">50%</option><option value="1" selected>100%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="2">200%</option></select></label>
+    <span class="hint">画布 480×480 · 左滑下一页 · 右滑返回 · ←/→ 也可切换</span>
+  </div>
+  <main class="stage"><div class="device"><div id="screen">
+    <section id="overview" class="page active" aria-label="当前天气页面">
+      <div class="label m32 ellipsis" style="left:37px;top:7px;width:267px">Shanghai</div>
+      <div class="label m22 right ellipsis muted" style="left:314px;top:14px;width:136px">0m ago</div>
+      <div class="card" style="left:24px;top:50px;width:432px;height:176px">
+        <div class="icon" style="left:25px;top:23px;width:72px;height:72px"><img src="icons/cloudy.png" alt="Tabler partly cloudy"></div>
+        <div class="label inter52" style="left:108px;top:39px;width:132px">26°</div>
+        <div class="label m28 center condition" style="left:14px;top:110px;width:204px;height:34px">Partly cloudy</div>
+        <div class="divider" style="left:228px;top:24px;width:1px;height:128px"></div>
+        <div class="label m24 soft" style="left:244px;top:16px;width:172px">Feels 27°</div>
+        <div class="label m24 soft" style="left:244px;top:54px;width:172px">Humidity 61%</div>
+        <div class="label m24 soft ellipsis" style="left:244px;top:92px;width:172px">Wind Southeast 2</div>
+        <div class="label m24 soft" style="left:244px;top:130px;width:172px">AQI 42</div>
+      </div>
+      <div class="label m20 muted" style="left:24px;top:238px">3-DAY FORECAST</div>
+      <div id="forecastCards"></div><div class="page-dots"><i class="on"></i><i></i></div>
+    </section>
+    <section id="trend" class="page" aria-label="天气趋势页面">
+      <div class="label m28 ellipsis" style="left:32px;top:7px;width:432px">Shanghai</div>
+      <div class="card" style="left:24px;top:43px;width:432px;height:200px">
+        <div class="label m24 muted" style="left:12px;top:6px;height:25px">TEMPERATURE · 24H</div>
+        <div class="label m20 right" style="left:251px;top:9px;width:166px">24°C - 31°C</div>
+        <div class="axis-label right" style="left:-1px;top:38px;width:51px;font-size:20px;line-height:22px">31°C</div>
+        <div class="axis-label right" style="left:-1px;top:95px;width:51px;font-size:20px;line-height:22px">27°C</div>
+        <div class="axis-label right" style="left:-1px;top:145px;width:52px;font-size:20px;line-height:22px">24°C</div>
+        <svg id="tempChart" class="chart" style="left:55px;top:41px;width:360px;height:126px" viewBox="0 0 360 126" preserveAspectRatio="none"></svg>
+        <div class="axis-label" style="left:60px;top:172px;font-size:20px;line-height:22px">0h</div>
+        <div class="axis-label center" style="left:178px;top:172px;width:110px;font-size:20px;line-height:22px">+12h</div>
+        <div class="axis-label right" style="left:346px;top:172px;width:66px;font-size:20px;line-height:22px">+24h</div>
+      </div>
+      <div class="card" style="left:24px;top:254px;width:432px;height:200px">
+        <div class="label m25 muted" style="left:12px;top:6px;height:25px">PRECIPITATION · 2H</div>
+        <div class="label m18 marquee soft" style="left:14px;top:34px;width:396px;height:24px"><span>Light rain possible in the next two hours</span></div>
+        <div class="axis-label right" style="left:0;top:59px;width:62px;height:22px">0.3mm</div>
+        <div class="axis-label right" style="left:0;top:148px;width:62px;height:22px">0.0mm</div>
+        <svg id="rainChart" class="chart" style="left:65px;top:61px;width:350px;height:110px" viewBox="0 0 350 110" preserveAspectRatio="none"></svg>
+        <div class="axis-label" style="left:58px;top:175px;font-size:20px;line-height:22px">0m</div>
+        <div class="axis-label center" style="left:180px;top:175px;width:110px;font-size:20px;line-height:22px">+60m</div>
+        <div class="axis-label right" style="left:342px;top:175px;width:72px;height:22px;font-size:20px;line-height:22px">+120m</div>
+      </div>
+      <div class="page-dots"><i></i><i class="on"></i></div>
+    </section>
+  </div></div>
+  <aside class="editor-panel" aria-label="LVGL 坐标编辑器">
+    <h2>LVGL 坐标编辑器</h2>
+    <div class="editor-note">点击画面元素后拖拽，或输入精确数值。这里的 X/Y 会直接对应 LVGL 的对象坐标。</div>
+    <div id="selectedName">尚未选择元素</div>
+    <div id="selectedPath">点击文字、图标、卡片或图表</div>
+    <div class="fields">
+      <label>X <input id="fieldX" data-field="left" type="number" step="1" disabled></label>
+      <label>Y <input id="fieldY" data-field="top" type="number" step="1" disabled></label>
+      <label>宽度 <input id="fieldW" data-field="width" type="number" min="1" step="1" disabled></label>
+      <label>高度 <input id="fieldH" data-field="height" type="number" min="1" step="1" disabled></label>
+      <label>字体大小 <input id="fieldFont" data-field="fontSize" type="number" min="8" max="96" step="1" disabled></label>
+      <label>移动步长 <input id="nudgeStep" type="number" min="1" max="20" step="1" value="1"></label>
+    </div>
+    <div class="editor-actions">
+      <button data-nudge="left">← 左移</button><button data-nudge="right">右移 →</button>
+      <button data-nudge="up">↑ 上移</button><button data-nudge="down">下移 ↓</button>
+      <button id="resetSelected">还原当前</button><button id="resetAll">还原全部</button>
+      <button id="copyChanges">复制变更</button>
+    </div>
+    <div class="output-title">LVGL 变更清单（调完后我会读取这里）</div>
+    <textarea id="changeOutput" readonly>尚无变更</textarea>
+  </aside></main>
+  <script>
+    const forecasts=[{date:'08-15',temp:'25° / 32°',text:'Cloudy',icon:'cloud'},{date:'08-16',temp:'24° / 30°',text:'Rain',icon:'rain'},{date:'08-17',temp:'24° / 31°',text:'Clear',icon:'sun'}];
+    const icons={cloud:'<img src="icons/cloud.png" alt="Tabler cloud">',rain:'<img src="icons/rain.png" alt="Tabler rain">',sun:'<img src="icons/sun.png" alt="Tabler sun">'};
+    document.querySelector('#forecastCards').innerHTML=forecasts.map((d,i)=>`<div class="card" style="left:${24+i*146}px;top:264px;width:140px;height:184px"><div class="label m24 center soft" style="left:0;top:10px;width:140px">${d.date}</div><div class="icon" style="left:42px;top:42px;width:56px;height:56px">${icons[d.icon]}</div><div class="label m24 center" style="left:0;top:105px;width:140px">${d.temp}</div><div class="label m24 center muted ellipsis" style="left:8px;top:140px;width:124px;height:28px">${d.text}</div></div>`).join('');
+    function chart(svg,values,color){const w=+svg.viewBox.baseVal.width,h=+svg.viewBox.baseVal.height,pad=5,innerW=w-pad*2,innerH=h-pad*2,min=Math.min(...values),max=Math.max(...values),range=Math.max(1,max-min);let html='';for(let y=0;y<3;y++)html+=`<line class="grid" x1="${pad}" y1="${pad+y*innerH/2}" x2="${w-pad}" y2="${pad+y*innerH/2}"/>`;for(let x=0;x<5;x++)html+=`<line class="grid" x1="${pad+x*innerW/4}" y1="${pad}" x2="${pad+x*innerW/4}" y2="${h-pad}"/>`;const raw=values.map((v,i)=>[pad+i*innerW/(values.length-1),h-pad-(v-min)/range*innerH]),xy=raw.map((p,i)=>i===0||i===raw.length-1?p:[p[0],(raw[i-1][1]+2*p[1]+raw[i+1][1])/4]),smooth=[xy[0]];for(let i=0;i+1<xy.length;i++){const p0=xy[i?i-1:i][1],p1=xy[i][1],p2=xy[i+1][1],p3=xy[i+2<xy.length?i+2:i+1][1];for(let step=1;step<=12;step++){const t=step/12,t2=t*t,t3=t2*t,x=xy[i][0]+(xy[i+1][0]-xy[i][0])*t;let y=.5*((2*p1)+(-p0+p2)*t+(2*p0-5*p1+4*p2-p3)*t2+(-p0+3*p1-3*p2+p3)*t3);y=Math.max(pad,Math.min(h-pad,y));smooth.push([x,y])}}html+=`<path class="line" stroke="${color}" d="M ${smooth.map(p=>p.join(' ')).join(' L ')}"/>`;xy.forEach(([x,y])=>html+=`<circle class="point" fill="${color}" cx="${x}" cy="${y}" r="2.5"/>`);svg.innerHTML=html;}
+    chart(document.querySelector('#tempChart'),[26,25,25,24,24,25,27,29,30,31,31,30,29,28,27,27,26,26,25,25,24,24,24,25],'#38bdf8');
+    chart(document.querySelector('#rainChart'),[0,0,0,0,.02,.05,.12,.2,.28,.21,.14,.08,.03,0,0,0,0,0,0,.03,.07,.04,0,0],'#60a5fa');
+    const screen=document.querySelector('#screen'),pages=[document.querySelector('#overview'),document.querySelector('#trend')],buttons=[document.querySelector('#overviewBtn'),document.querySelector('#trendBtn')];let pageIndex=0,startX=0,startY=0,editorEnabled=true;
+    function showPage(index){pageIndex=Math.max(0,Math.min(1,index));pages.forEach((p,i)=>p.classList.toggle('active',i===pageIndex));buttons.forEach((b,i)=>b.classList.toggle('active',i===pageIndex));pages[pageIndex].classList.remove('swipe-flash');void pages[pageIndex].offsetWidth;pages[pageIndex].classList.add('swipe-flash');}
+    buttons.forEach((b,i)=>b.addEventListener('click',()=>showPage(i)));screen.addEventListener('pointerdown',e=>{if(editorEnabled)return;startX=e.clientX;startY=e.clientY;screen.setPointerCapture(e.pointerId)});screen.addEventListener('pointerup',e=>{if(editorEnabled)return;const dx=e.clientX-startX,dy=e.clientY-startY;if(Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy))showPage(dx<0?1:0)});document.addEventListener('keydown',e=>{if(editorEnabled)return;if(e.key==='ArrowRight')showPage(1);if(e.key==='ArrowLeft')showPage(0)});document.querySelector('#gridBtn').addEventListener('click',e=>{screen.classList.toggle('debug');e.currentTarget.classList.toggle('active')});document.querySelector('#scaleSelect').addEventListener('change',e=>document.documentElement.style.setProperty('--scale',e.target.value));
+
+    const editableSelector='.page .label,.page .axis-label,.page .icon,.page .card,.page .divider,.page .chart,.page .page-dots';
+    const originalValues=new Map(); let selectedElement=null,dragState=null;
+    const editorFields={left:document.querySelector('#fieldX'),top:document.querySelector('#fieldY'),width:document.querySelector('#fieldW'),height:document.querySelector('#fieldH'),fontSize:document.querySelector('#fieldFont')};
+    function numericStyle(el,property){const value=parseFloat(getComputedStyle(el)[property]);return Number.isFinite(value)?Math.round(value):0;}
+    function elementName(el){const text=(el.textContent||'').replace(/\s+/g,' ').trim();if(text)return text.slice(0,42);if(el.classList.contains('icon'))return '天气图标';if(el.classList.contains('chart'))return el.id||'曲线图';if(el.classList.contains('card'))return '卡片';if(el.classList.contains('divider'))return '分隔线';return '页面指示器';}
+    function snapshot(el){const scale=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--scale'))||1,rect=el.getBoundingClientRect(),inlineWidth=parseFloat(el.style.width),inlineHeight=parseFloat(el.style.height);return {left:numericStyle(el,'left'),top:numericStyle(el,'top'),width:Number.isFinite(inlineWidth)?Math.round(inlineWidth):Math.round(rect.width/scale),height:Number.isFinite(inlineHeight)?Math.round(inlineHeight):Math.round(rect.height/scale),fontSize:numericStyle(el,'fontSize'),explicitWidth:!!el.style.width,explicitHeight:!!el.style.height,styleLeft:el.style.left,styleTop:el.style.top,styleWidth:el.style.width,styleHeight:el.style.height,styleFontSize:el.style.fontSize,styleLineHeight:el.style.lineHeight};}
+    function initializeEditor(){document.querySelectorAll(editableSelector).forEach((el,index)=>{el.dataset.editable='true';el.dataset.editorId=`${el.closest('.page').id}.${index}`;originalValues.set(el,snapshot(el));});screen.classList.add('editing');updateChanges();}
+    function setSelected(el){if(selectedElement)selectedElement.dataset.selected='false';selectedElement=el||null;if(!selectedElement){document.querySelector('#selectedName').textContent='尚未选择元素';document.querySelector('#selectedPath').textContent='点击文字、图标、卡片或图表';Object.values(editorFields).forEach(f=>{f.value='';f.disabled=true;});return;}selectedElement.dataset.selected='true';const values=snapshot(selectedElement),pageName=selectedElement.closest('.page').id==='trend'?'天气趋势页':'当前天气页',typeName=selectedElement.matches('.label,.axis-label')?'文字':selectedElement.classList.contains('icon')?'图标':selectedElement.classList.contains('chart')?'曲线图':selectedElement.classList.contains('card')?'卡片':'装饰';document.querySelector('#selectedName').textContent=elementName(selectedElement);document.querySelector('#selectedPath').textContent=`${pageName} · ${typeName}`;for(const [key,input] of Object.entries(editorFields)){input.value=values[key];input.disabled=key==='fontSize'&&!selectedElement.matches('.label,.axis-label');}}
+    function lineHeightFor(size){const exact={16:18,20:22,22:24,28:30,32:35,52:40};return exact[size]||Math.round(size*1.1);}
+    function applyField(property,value){if(!selectedElement||!Number.isFinite(value))return;if(property==='fontSize'){selectedElement.style.fontSize=`${value}px`;selectedElement.style.lineHeight=`${lineHeightFor(value)}px`;}else selectedElement.style[property]=`${Math.round(value)}px`;setSelected(selectedElement);updateChanges();}
+    function updateChanges(){const changes=[];for(const [el,original] of originalValues){const current=snapshot(el),changed={};for(const key of ['left','top','width','height','fontSize']){if(key==='fontSize'&&!el.matches('.label,.axis-label'))continue;if(key==='width'&&!original.explicitWidth&&!el.style.width)continue;if(key==='height'&&!original.explicitHeight&&!el.style.height)continue;if(current[key]!==original[key])changed[key]={from:original[key],to:current[key]};}if(Object.keys(changed).length)changes.push({id:el.dataset.editorId,page:el.closest('.page').id,name:elementName(el),parent:el.parentElement.classList.contains('card')?'card':'page',changes:changed});}document.querySelector('#changeOutput').value=changes.length?JSON.stringify({changes},null,2):'尚无变更';}
+    screen.addEventListener('pointerdown',e=>{if(!editorEnabled)return;const target=e.target.closest('[data-editable]');if(!target||!screen.contains(target))return;e.preventDefault();e.stopPropagation();setSelected(target);const scale=screen.getBoundingClientRect().width/480,values=snapshot(target);dragState={pointerId:e.pointerId,startClientX:e.clientX,startClientY:e.clientY,startLeft:values.left,startTop:values.top,scale};target.setPointerCapture(e.pointerId);},true);
+    screen.addEventListener('pointermove',e=>{if(!editorEnabled||!dragState||e.pointerId!==dragState.pointerId||!selectedElement)return;e.preventDefault();selectedElement.style.left=`${Math.round(dragState.startLeft+(e.clientX-dragState.startClientX)/dragState.scale)}px`;selectedElement.style.top=`${Math.round(dragState.startTop+(e.clientY-dragState.startClientY)/dragState.scale)}px`;setSelected(selectedElement);updateChanges();},true);
+    screen.addEventListener('pointerup',e=>{if(dragState&&e.pointerId===dragState.pointerId){dragState=null;e.preventDefault();e.stopPropagation();}},true);
+    Object.values(editorFields).forEach(input=>input.addEventListener('input',()=>applyField(input.dataset.field,Number(input.value))));
+    document.querySelectorAll('[data-nudge]').forEach(button=>button.addEventListener('click',()=>{if(!selectedElement)return;const step=Math.max(1,Number(document.querySelector('#nudgeStep').value)||1),values=snapshot(selectedElement),direction=button.dataset.nudge;if(direction==='left')applyField('left',values.left-step);if(direction==='right')applyField('left',values.left+step);if(direction==='up')applyField('top',values.top-step);if(direction==='down')applyField('top',values.top+step);}));
+    function restoreElement(el,original){el.style.left=original.styleLeft;el.style.top=original.styleTop;el.style.width=original.styleWidth;el.style.height=original.styleHeight;el.style.fontSize=original.styleFontSize;el.style.lineHeight=original.styleLineHeight;}
+    document.querySelector('#resetSelected').addEventListener('click',()=>{if(!selectedElement)return;restoreElement(selectedElement,originalValues.get(selectedElement));setSelected(selectedElement);updateChanges();});
+    document.querySelector('#resetAll').addEventListener('click',()=>{for(const [el,original] of originalValues)restoreElement(el,original);setSelected(null);updateChanges();});
+    document.querySelector('#copyChanges').addEventListener('click',async()=>{const output=document.querySelector('#changeOutput');try{await navigator.clipboard.writeText(output.value);document.querySelector('#copyChanges').textContent='已复制';setTimeout(()=>document.querySelector('#copyChanges').textContent='复制变更',1200);}catch{output.select();document.execCommand('copy');}});
+    document.querySelector('#editBtn').addEventListener('click',e=>{editorEnabled=!editorEnabled;e.currentTarget.classList.toggle('active',editorEnabled);screen.classList.toggle('editing',editorEnabled);if(!editorEnabled)setSelected(null);});
+    document.fonts.ready.then(initializeEditor);
+  </script>
+</body>
+</html>

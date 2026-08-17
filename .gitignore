@@ -1,0 +1,29 @@
+# Local credentials
+arduino/08_LVGL_Clock/clock_weather_config.h
+arduino/08_LVGL_Clock/clock_weather_config.private.h
+
+# Generated output and caches
+build/
+**/build/
+__pycache__/
+*.py[cod]
+*.log
+*.tmp
+*.elf
+*.map
+.idea/
+.vscode/
+.pio/
+.DS_Store
+
+# Large media: keep locally or publish with Git LFS / release archives
+media/source_mp4/
+tfcard/wallpaper/
+tfcard/video/
+tfcard/music/
+
+# Bundled-library content not used by this ESP32-S3 sketch
+arduino/libraries/ESP32_JPEG/
+arduino/libraries/lvgl/demos/
+arduino/libraries/lvgl/src/demos/
+arduino/libraries/lvgl/env_support/
