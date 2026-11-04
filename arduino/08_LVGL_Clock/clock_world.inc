@@ -152,7 +152,7 @@ void refreshWorldCityListStyles() {
       LV_PART_MAIN);
     if (lv_obj_get_child_cnt(row))
       lv_obj_set_style_text_color(lv_obj_get_child(row, 0),
-        selected ? lv_color_white() : themeText(), 0);
+        selected ? themeTextOnAccent() : themeText(), 0);
   }
 }
 

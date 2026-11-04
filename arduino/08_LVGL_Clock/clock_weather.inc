@@ -526,7 +526,9 @@ const lv_img_dsc_t *iconForCode(uint16_t code) {
 
 lv_color_t weatherAccentForCode(uint16_t code) {
   (void)code;
-  return themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white();
+  // Follow the active theme's text color (phosphor amber, neon-tinted white or
+  // plain white) instead of hard-coding amber/white.
+  return themeText();
 }
 
 void setWeatherIconInHolder(lv_obj_t *holder, uint16_t code) {

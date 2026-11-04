@@ -305,7 +305,7 @@ void enterLowPowerClockMode() {
     lv_obj_align(timePanel, LV_ALIGN_CENTER, 0, -36);
     lv_obj_center(timeLabel);
     lv_obj_clear_flag(timeLabel, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_style_text_color(timeLabel, lv_color_white(), 0);
+    applyClockColor();
     lv_obj_set_style_text_opa(timeLabel, LV_OPA_COVER, 0);
     lv_obj_clear_flag(timePanel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(timePanel);
@@ -441,7 +441,7 @@ void exitLowPowerClockMode() {
   }
   lv_obj_align(timePanel, LV_ALIGN_TOP_LEFT, 24, 24);
   lv_obj_center(timeLabel);
-  lv_obj_set_style_text_color(timeLabel, lv_color_white(), 0);
+  applyClockColor();
   // Screen-off standby hides both objects. Restoring their normal styles does
   // not clear LVGL's hidden flags, which previously left the album clock
   // missing until reboot after waking with the AOD time option disabled.

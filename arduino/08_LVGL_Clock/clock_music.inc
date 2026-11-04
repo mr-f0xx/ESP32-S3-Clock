@@ -4,11 +4,14 @@
 constexpr uint8_t MUSIC_TRACK_LIMIT = 64;
 constexpr uint32_t MUSIC_SD_FREQUENCY = 20000000;
 constexpr uint32_t MUSIC_DEFAULT_SAMPLE_RATE = 44100;
-// Reserve I2S before the video DMA arena fragments internal SRAM. Eight 768 B
-// descriptors provide 1536 stereo frames (64 ms at 24 kHz). The longer queue
-// covers one JPEG core burst plus a 2 KiB WAV read without inserting silence.
-constexpr uint8_t MUSIC_I2S_DMA_BUFFER_COUNT = 10;
-constexpr uint16_t MUSIC_I2S_DMA_BUFFER_BYTES = 1024;
+// Reserve I2S before the video DMA arena fragments internal SRAM. Sixteen
+// 2048 B descriptors provide 8192 stereo frames: ~186 ms of headroom at
+// 44.1 kHz (radio / music) and ~341 ms at 24 kHz (video sidecar). The deep queue
+// rides out a full LVGL recomposition, a JPEG core burst or a TLS read without
+// the DMA running dry, which is what produced the audible radio stutter.
+// 2048 B per descriptor stays under the ESP-IDF 4092 B DMA buffer limit.
+constexpr uint8_t MUSIC_I2S_DMA_BUFFER_COUNT = 16;
+constexpr uint16_t MUSIC_I2S_DMA_BUFFER_BYTES = 2048;
 
 lv_obj_t *musicProgressBar = nullptr;
 uint32_t musicProgressLastUpdateAt = 0;
@@ -1322,10 +1325,10 @@ void createMusicPage(lv_obj_t *screen) {
   lv_obj_set_style_border_color(playButton, lv_color_hex(CRT_AMBER), LV_PART_MAIN);
   musicPlayIcon = lv_obj_get_child(playButton, lv_obj_get_child_cnt(playButton) - 1);
   musicPauseIcon = createTablerIcon(playButton, TABLER_ICON_PAUSE, 32,
-    themeIsAmber() ? lv_color_black() : lv_color_white());
+    themeTextOnAccent());
   if (musicPlayIcon)
     setTablerIconColor(musicPlayIcon,
-      themeIsAmber() ? lv_color_black() : lv_color_white());
+      themeTextOnAccent());
   lv_obj_add_flag(musicPauseIcon, LV_OBJ_FLAG_HIDDEN);
   createMusicControlButton(musicPage, 58, 88, 352, musicNextEvent,
                            TABLER_ICON_SKIP_FORWARD, 28);
@@ -1367,7 +1370,7 @@ void refreshMusicTheme() {
       lv_obj_set_style_border_color(child, lv_color_hex(CRT_AMBER), LV_PART_MAIN);
       for (uint32_t j = 0; j < lv_obj_get_child_cnt(child); ++j)
         setTablerIconColor(lv_obj_get_child(child, j),
-          themeIsAmber() ? lv_color_black() : lv_color_white());
+          themeTextOnAccent());
     } else {
       lv_obj_set_style_bg_color(child, lv_color_hex(themeSurface(0x0A0A0A)),
                                 LV_PART_MAIN);

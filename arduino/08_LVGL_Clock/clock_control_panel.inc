@@ -547,11 +547,24 @@ void themeControlEvent(lv_event_t *event) {
   setUiTheme(static_cast<uint8_t>((uiTheme + 1) % UI_THEME_COUNT), true);
 }
 
+void fontControlEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  markUserActivity();
+  // Queue the next clock font; the main loop applies it inside a screen fade.
+  // Advance from the pending font when a change is already queued so rapid taps
+  // step through the list instead of re-selecting the same next font.
+  const uint8_t base =
+    clockFontChangeRequested ? pendingClockFontIndex : clockFontIndex;
+  pendingClockFontIndex = static_cast<uint8_t>((base + 1) % CLOCK_FONT_COUNT);
+  clockFontChangeRequested = true;
+  updateControlPillLabels();
+}
+
 lv_obj_t *createControlPillButton(int16_t x, lv_event_cb_t callback,
                                   lv_obj_t **labelOut) {
   lv_obj_t *button = lv_btn_create(controlPanel);
   lv_obj_set_pos(button, x, 16);
-  lv_obj_set_size(button, 82, 44);
+  lv_obj_set_size(button, 68, 44);
   lv_obj_set_style_radius(button, 22, 0);
   lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0A0A0A)), 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
@@ -582,6 +595,10 @@ void updateControlPillLabels() {
     lv_label_set_text(colorControlLabel,
       colorNames[clockColorIndex < CLOCK_COLOR_COUNT ? clockColorIndex : 0]);
   }
+  if (fontControlLabel)
+    lv_label_set_text(fontControlLabel,
+      clockFontShortName(clockFontChangeRequested ? pendingClockFontIndex
+                                                  : clockFontIndex));
 }
 
 void createControlPanel() {
@@ -613,11 +630,15 @@ void createControlPanel() {
   lv_obj_set_style_bg_opa(batteryStatusLabel, LV_OPA_COVER, 0);
   lv_obj_align(batteryStatusLabel, LV_ALIGN_TOP_LEFT, 86, 25);
 
-  languageControlButton = createControlPillButton(290, languageControlEvent,
-                                                  &languageControlLabel);
-  colorControlButton = createControlPillButton(198, colorControlEvent,
+  // Four compact pills fit to the right of the battery readout (which ends at
+  // ~x178): clock color, clock font, UI language and UI theme.
+  colorControlButton = createControlPillButton(186, colorControlEvent,
                                                &colorControlLabel);
-  themeControlButton = createControlPillButton(382, themeControlEvent,
+  fontControlButton = createControlPillButton(260, fontControlEvent,
+                                              &fontControlLabel);
+  languageControlButton = createControlPillButton(334, languageControlEvent,
+                                                  &languageControlLabel);
+  themeControlButton = createControlPillButton(408, themeControlEvent,
                                                &themeControlLabel);
   updateControlPillLabels();
 
@@ -689,7 +710,8 @@ void refreshControlPanelTheme() {
   if (wifiControlStatus) lv_obj_set_style_bg_color(wifiControlStatus, lv_color_black(), 0);
   if (wifiControlIp) lv_obj_set_style_bg_color(wifiControlIp, lv_color_black(), 0);
   if (bluetoothControlStatus) lv_obj_set_style_bg_color(bluetoothControlStatus, lv_color_black(), 0);
-  for (lv_obj_t *button : {languageControlButton, colorControlButton, themeControlButton}) {
+  for (lv_obj_t *button : {languageControlButton, colorControlButton,
+                           fontControlButton, themeControlButton}) {
     if (!button) continue;
     lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0A0A0A)), 0);
     lv_obj_set_style_border_color(button, lv_color_hex(themeBorder(0x2A2A2A)), 0);

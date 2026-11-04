@@ -54,6 +54,11 @@ char radioStreamTitle[128] = "";
 uint32_t radioStreamStartedAt = 0;
 uint32_t radioLastReconnectAt = 0;
 uint32_t radioLastTitleRefreshAt = 0;
+// Diagnostics: count ring-buffer underflows and throttle serial reporting so a
+// struggling stream is visible without flooding the console.
+uint32_t radioUnderflowCount = 0;
+uint32_t radioLastUnderflowLogAt = 0;
+uint32_t radioLastBufferLogAt = 0;
 
 void updateRadioPageText();
 void updateRadioPlayPauseIcon();
@@ -77,6 +82,18 @@ void radioMetadataCallback(void *cbData, const char *type, bool isUnicode,
 void radioStatusCallback(void *cbData, int code, const char *str) {
   (void)cbData;
   (void)str;
+  if (code == AudioFileSourceBuffer::STATUS_UNDERFLOW) {
+    ++radioUnderflowCount;
+    const uint32_t now = millis();
+    if (now - radioLastUnderflowLogAt >= 2000) {
+      radioLastUnderflowLogAt = now;
+      Serial.printf("Radio: ring underflow #%lu (fill %lu KiB)\n",
+                    static_cast<unsigned long>(radioUnderflowCount),
+                    radioBuffer
+                      ? static_cast<unsigned long>(radioBuffer->getFillLevel() / 1024U)
+                      : 0UL);
+    }
+  }
   if (code == AudioFileSourceBuffer::STATUS_FILLING ||
       code == AudioFileSourceBuffer::STATUS_UNDERFLOW) {
     if (radioStreamActive && !radioReconnectPending && !radioPaused)
@@ -121,22 +138,18 @@ void refreshRadioStationListStyles() {
   for (uint32_t i = 0; i < childCount; ++i) {
     lv_obj_t *row = lv_obj_get_child(radioStationListList, i);
     const bool selected = i == radioStationIndex;
-    if (themeIsAmber()) {
-      lv_obj_set_style_bg_color(row,
-        selected ? lv_color_hex(CRT_AMBER) : lv_color_black(), LV_PART_MAIN);
-      lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_PART_MAIN);
-      lv_obj_set_style_border_color(row, lv_color_hex(CRT_AMBER_FAINT), LV_PART_MAIN);
-    } else {
-      lv_obj_set_style_bg_color(row,
-        lv_color_hex(selected ? UI_ACCENT_BLUE : 0x0D0D12), LV_PART_MAIN);
-      lv_obj_set_style_bg_opa(row, selected ? LV_OPA_COVER : LV_OPA_80, LV_PART_MAIN);
-      lv_obj_set_style_border_color(row,
-        lv_color_hex(selected ? 0x60A5FA : 0x282C37), LV_PART_MAIN);
-    }
+    // Theme helpers already collapse amber to phosphor and the neon palettes
+    // to their single accent, so one path covers every theme.
+    lv_obj_set_style_bg_color(row,
+      lv_color_hex(selected ? themeAccent(UI_ACCENT_BLUE)
+                            : themeSurface(0x0D0D12)), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(row, selected ? LV_OPA_COVER : LV_OPA_80, LV_PART_MAIN);
+    lv_obj_set_style_border_color(row,
+      lv_color_hex(selected ? themeAccent(UI_ACCENT_BLUE)
+                            : themeBorder(0x282C37)), LV_PART_MAIN);
     if (lv_obj_get_child_cnt(row)) {
       lv_obj_set_style_text_color(lv_obj_get_child(row, 0),
-        themeIsAmber() ? (selected ? lv_color_black() : lv_color_hex(CRT_AMBER))
-                       : lv_color_white(), 0);
+        selected ? themeTextOnAccent() : themeText(), 0);
     }
   }
 }
@@ -230,6 +243,8 @@ bool startRadioStation(uint8_t index) {
   radioPaused = false;
   radioStreamTitle[0] = '\0';
   radioStreamStartedAt = millis();
+  radioUnderflowCount = 0;
+  radioLastBufferLogAt = millis();
   setRadioStatus(STR_RADIO_CONNECTING);
   updateRadioPageText();
   // Show "Connecting..." before the blocking HTTP request below.
@@ -304,9 +319,25 @@ void serviceRadioPlayback() {
   if (!radioGenerator || !radioGenerator->isRunning()) return;
   if (radioGenerator->loop()) {
     if (radioStatusId != STR_PLAYING) setRadioStatus(STR_PLAYING);
-    if (millis() - radioLastTitleRefreshAt >= 1000) {
-      radioLastTitleRefreshAt = millis();
+    const uint32_t now = millis();
+    if (now - radioLastTitleRefreshAt >= 1000) {
+      radioLastTitleRefreshAt = now;
       updateRadioTitle();
+    }
+    // Periodic health line: ring-buffer fill and the I2S DMA headroom. A fill
+    // that keeps collapsing toward 0 points at the network; a healthy fill with
+    // audible gaps points at the DMA / main-loop scheduling instead.
+    if (now - radioLastBufferLogAt >= 5000) {
+      radioLastBufferLogAt = now;
+      Serial.printf("Radio: fill %lu/%lu KiB, DMA %lu frames, underflows %lu\n",
+                    radioBuffer
+                      ? static_cast<unsigned long>(radioBuffer->getFillLevel() / 1024U)
+                      : 0UL,
+                    static_cast<unsigned long>(RADIO_BUFFER_BYTES / 1024U),
+                    musicOutput
+                      ? static_cast<unsigned long>(musicOutput->dmaCapacityFrames())
+                      : 0UL,
+                    static_cast<unsigned long>(radioUnderflowCount));
     }
     return;
   }
@@ -437,7 +468,10 @@ void processRadioPageTransition() {
     beginScreenFade(activeBrightness);
     hideAppMenu(false);
     showRadioPage(false);
-    setMusicWholeScreenRefresh(true);
+    // The radio page is a static UI with a scrolling title. Do NOT enable
+    // whole-screen composition here: expanding every dirty area to 480x480
+    // starved the shared I2S DMA and made the stream stutter. Normal partial
+    // refreshes (even-aligned by rounderCallback) are cheap and keep audio fed.
     commitRadioFullScreen();
     endScreenFade(activeBrightness);
   } else if (radioPageHideRequested) {
@@ -445,7 +479,6 @@ void processRadioPageTransition() {
     beginScreenFade(activeBrightness);
     hideRadioPage(false, true);
     commitRadioFullScreen();
-    setMusicWholeScreenRefresh(false);
     endScreenFade(activeBrightness);
   }
 }
@@ -594,13 +627,14 @@ void createRadioPage(lv_obj_t *screen) {
   lv_obj_set_style_bg_color(playButton, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
                             LV_PART_MAIN);
   lv_obj_set_style_border_width(playButton, themeIsAmber() ? 2 : 0, LV_PART_MAIN);
-  lv_obj_set_style_border_color(playButton, lv_color_hex(CRT_AMBER), LV_PART_MAIN);
+  lv_obj_set_style_border_color(playButton,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER)
+                 : lv_color_hex(themeBorder(0xFFFFFF)), LV_PART_MAIN);
   radioPlayIcon = lv_obj_get_child(playButton, lv_obj_get_child_cnt(playButton) - 1);
   radioPauseIcon = createTablerIcon(playButton, TABLER_ICON_PAUSE, 32,
-    themeIsAmber() ? lv_color_black() : lv_color_white());
+    themeTextOnAccent());
   if (radioPlayIcon)
-    setTablerIconColor(radioPlayIcon,
-      themeIsAmber() ? lv_color_black() : lv_color_white());
+    setTablerIconColor(radioPlayIcon, themeTextOnAccent());
   lv_obj_add_flag(radioPauseIcon, LV_OBJ_FLAG_HIDDEN);
   createRadioControlButton(radioPage, 58, 88, 300, radioNextEvent,
                            TABLER_ICON_SKIP_FORWARD, 28);
@@ -645,10 +679,11 @@ void refreshRadioTheme() {
       lv_obj_set_style_bg_color(child, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
                                 LV_PART_MAIN);
       lv_obj_set_style_border_width(child, themeIsAmber() ? 2 : 0, LV_PART_MAIN);
-      lv_obj_set_style_border_color(child, lv_color_hex(CRT_AMBER), LV_PART_MAIN);
+      lv_obj_set_style_border_color(child,
+        themeIsAmber() ? lv_color_hex(CRT_AMBER)
+                     : lv_color_hex(themeBorder(0xFFFFFF)), LV_PART_MAIN);
       for (uint32_t j = 0; j < lv_obj_get_child_cnt(child); ++j)
-        setTablerIconColor(lv_obj_get_child(child, j),
-          themeIsAmber() ? lv_color_black() : lv_color_white());
+        setTablerIconColor(lv_obj_get_child(child, j), themeTextOnAccent());
     } else {
       lv_obj_set_style_bg_color(child, lv_color_hex(themeSurface(0x0A0A0A)), LV_PART_MAIN);
       lv_obj_set_style_border_color(child, lv_color_hex(themeBorder(0x343846)), LV_PART_MAIN);

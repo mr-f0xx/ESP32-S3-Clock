@@ -230,6 +230,8 @@ lv_obj_t *themeControlButton = nullptr;
 lv_obj_t *themeControlLabel = nullptr;
 lv_obj_t *colorControlButton = nullptr;
 lv_obj_t *colorControlLabel = nullptr;
+lv_obj_t *fontControlButton = nullptr;
+lv_obj_t *fontControlLabel = nullptr;
 lv_obj_t *wifiControlButton = nullptr;
 lv_obj_t *bluetoothControlButton = nullptr;
 lv_obj_t *wifiControlStatus = nullptr;
@@ -709,6 +711,7 @@ void loop() {
       lv_refr_now(nullptr);
       endScreenFade(activeBrightness);
     }
+    updateControlPillLabels();
   }
   if (uiAppearanceChangeRequested && !screenFadeTransitionActive) {
     uiAppearanceChangeRequested = false;
@@ -726,6 +729,9 @@ void loop() {
   if (millis() - lastWifiCheck >= 5000) {
     lastWifiCheck = millis();
     if (wifiUserEnabled && WiFi.status() == WL_CONNECTED) startNtp();
+    // Modem sleep is a common cause of periodic radio underflow; re-assert it
+    // is off while streaming in case a reconnect re-enabled power save.
+    if (radioStreamActive && WiFi.status() == WL_CONNECTED) WiFi.setSleep(false);
     updateNetworkLabels();
     updateControlPanelStatus();
   }
@@ -762,5 +768,6 @@ void loop() {
   serviceRadioPlayback();
   checkAutoSleep();
   if (weatherPageVisible) taskYIELD();
+  else if (radioStreamActive && !radioPaused && !radioReconnectPending) delay(1);
   else delay(5);
 }
