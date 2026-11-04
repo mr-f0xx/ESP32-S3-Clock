@@ -98,7 +98,8 @@ void disableLowPowerKeyWakeup() {
 }
 
 enum class LowPowerRestoreApp : uint8_t {
-  Album, AppMenu, Calendar, Alarm, Music, Audiobook, Radio, Weather, WeatherInfo
+  Album, AppMenu, Calendar, Alarm, Music, Audiobook, Radio, Weather, WeatherInfo,
+  WorldClock, PhotoFrame, Timer
 };
 
 LowPowerRestoreApp lowPowerRestoreApp = LowPowerRestoreApp::Album;
@@ -131,6 +132,9 @@ void captureLowPowerRestoreLocation() {
   else if (musicPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Music;
   else if (alarmPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Alarm;
   else if (calendarPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Calendar;
+  else if (worldClockPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::WorldClock;
+  else if (photoFramePageVisible) lowPowerRestoreApp = LowPowerRestoreApp::PhotoFrame;
+  else if (timerPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Timer;
   else if (appMenuVisible) lowPowerRestoreApp = LowPowerRestoreApp::AppMenu;
   else lowPowerRestoreApp = LowPowerRestoreApp::Album;
 }
@@ -156,6 +160,9 @@ void restoreLowPowerLocation() {
       else showWeatherWallpaperPage(false);
       break;
     case LowPowerRestoreApp::WeatherInfo: showWeatherInfoPage(false); break;
+    case LowPowerRestoreApp::WorldClock: showWorldClockPage(false); break;
+    case LowPowerRestoreApp::PhotoFrame: showPhotoFramePage(false); break;
+    case LowPowerRestoreApp::Timer: showTimerPage(false); break;
     default: break;
   }
   if (lowPowerRestoreControlPanel &&
@@ -168,7 +175,8 @@ void markUserActivity() {
 }
 
 void checkAutoSleep() {
-  if (lowPowerMode || screenFadeTransitionActive || !lastUserActivityAt) return;
+  if (deviceShuttingDown || lowPowerMode || screenFadeTransitionActive ||
+      !lastUserActivityAt) return;
   // Keep the full UI awake while USB/VBUS power is present. Refreshing the
   // activity timestamp also prevents an immediate sleep on unplug.
   if (pmuReady && power.isVbusIn()) {
@@ -231,6 +239,10 @@ void enterLowPowerClockMode() {
   suspendAudiobookForLowPower();
   suspendRadioForLowPower();
   suspendMusicForLowPower(weatherSdIdle);
+  hideWorldClockPage(false, false);
+  suspendPhotoFrameForLowPower();
+  if (timerAlertVisible) dismissTimerAlert();
+  suspendTimerForLowPower();
   suspendImageKeys();
   enableLowPowerKeyWakeup();
 
@@ -485,7 +497,8 @@ void exitLowPowerClockMode() {
 }
 
 void pollPowerKey() {
-  if (!pmuReady || lowPowerMode || millis() - lastPowerKeyCheck < 100) return;
+  if (deviceShuttingDown || !pmuReady || lowPowerMode ||
+      millis() - lastPowerKeyCheck < 100) return;
   lastPowerKeyCheck = millis();
   power.getIrqStatus();
   const bool longPressed = power.isPekeyLongPressIrq();
@@ -504,7 +517,53 @@ void pollPowerKey() {
   }
 }
 
+bool requestDevicePowerOff() {
+  if (deviceShuttingDown) return true;
+  if (!pmuReady) return false;
+  deviceShuttingDown = true;
+  Serial.println("Power tile: preparing AXP2101 shutdown");
+
+  // Reuse the already-tested standby teardown: it stops the alarm, music,
+  // audiobook and radio, parks the weather/video workers, unmounts the SD card
+  // when safe, flushes settings, stops Wi-Fi/web/SNTP and quiesces LVGL.
+  enterLowPowerClockMode();
+  if (!lowPowerMode) {
+    // The weather SD worker did not reach a safe idle. Leave the device awake
+    // and let the caller show a retry message instead of cutting power mid-I/O.
+    deviceShuttingDown = false;
+    Serial.println("Power tile: shutdown canceled, media/SD still busy");
+    return false;
+  }
+
+  // Unlike standby, shutdown must not leave a wake source armed. The AXP2101
+  // PWR key is the intended way back on; +/- must not wake a powered-off clock.
+  disableLowPowerKeyWakeup();
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+  if (lowPowerPanelModeActive) disableLowPowerPanelMode();
+  gfx->setBrightness(0);
+  gfx->displayOff();
+  lowPowerPanelSleeping = true;
+
+  // REG10h[0] turns every PMU rail off except VRTC. USB/VBUS may still be
+  // present at the connector, but the ESP32-S3 rails are cut; replugging USB or
+  // pressing PWR starts a fresh boot. Clear IRQs so a pending interrupt cannot
+  // act as a power-on source immediately after the rails drop.
+  power.disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
+  power.clearIrqStatus();
+  Serial.println("Power tile: cutting AXP2101 rails");
+  Serial.flush();
+  power.shutdown();
+
+  // Normally execution stops here because the CPU loses power. If the PMU did
+  // not cut the rails (for example a bus error), fall back to deep sleep rather
+  // than returning to the UI with the display already blanked.
+  delay(250);
+  esp_deep_sleep_start();
+  return true;
+}
+
 void runLowPowerClock() {
+  if (deviceShuttingDown) return;
   const uint32_t nowMs = millis();
   const uint32_t elapsed = nowMs - lowPowerLastTick;
   lowPowerLastTick = nowMs;
@@ -519,6 +578,12 @@ void runLowPowerClock() {
       exitLowPowerClockMode();
       return;
     }
+  }
+
+  if (timerRunning && static_cast<int32_t>(nowMs - timerEndsAt) >= 0) {
+    exitLowPowerClockMode();
+    finishTimer();
+    return;
   }
 
   if (rtcReady && rtcTimeValid &&
@@ -561,7 +626,7 @@ void runLowPowerClock() {
   }
 
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
-  if (sleepTimeDisplayEnabled || anyAlarmEnabled()) {
+  if (sleepTimeDisplayEnabled || anyAlarmEnabled() || timerRunning) {
     uint32_t nextWakeMs = LOW_POWER_CLOCK_POLL_SECONDS * 1000UL;
     if (rtcReady && rtcTimeValid) {
       const int32_t clockRemaining =
@@ -569,6 +634,12 @@ void runLowPowerClock() {
       nextWakeMs = min(nextWakeMs,
                        clockRemaining > 0
                          ? static_cast<uint32_t>(clockRemaining) : 1U);
+    }
+    if (timerRunning) {
+      const int32_t timerRemaining = static_cast<int32_t>(timerEndsAt - nowMs);
+      nextWakeMs = min(nextWakeMs,
+                       timerRemaining > 0
+                         ? static_cast<uint32_t>(timerRemaining) : 1U);
     }
     esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(nextWakeMs) * 1000ULL);
   }

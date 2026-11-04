@@ -52,6 +52,10 @@ enum ClockFontId : uint8_t {
   CLOCK_FONT_KAMERON,
   CLOCK_FONT_SILKSCREEN,
   CLOCK_FONT_DOTGOTHIC16,
+  CLOCK_FONT_ORBITRON,
+  CLOCK_FONT_AUDIOWIDE,
+  CLOCK_FONT_CINZEL,
+  CLOCK_FONT_BEBASNEUE,
   CLOCK_FONT_COUNT
 };
 
@@ -175,8 +179,9 @@ lv_obj_t *addressLabel = nullptr;
 lv_obj_t *settingsButton = nullptr;
 lv_obj_t *controlPanel = nullptr;
 lv_obj_t *appMenu = nullptr;
-lv_obj_t *appMenuPages[3] = {};
-lv_obj_t *appMenuPageDots[3] = {};
+constexpr uint8_t APP_MENU_PAGE_COUNT = 4;
+lv_obj_t *appMenuPages[APP_MENU_PAGE_COUNT] = {};
+lv_obj_t *appMenuPageDots[APP_MENU_PAGE_COUNT] = {};
 lv_obj_t *wifiSetupPage = nullptr;
 lv_obj_t *wifiSetupSsidLabel = nullptr;
 lv_obj_t *wifiSetupPasswordLabel = nullptr;
@@ -223,6 +228,8 @@ lv_obj_t *languageControlButton = nullptr;
 lv_obj_t *languageControlLabel = nullptr;
 lv_obj_t *themeControlButton = nullptr;
 lv_obj_t *themeControlLabel = nullptr;
+lv_obj_t *colorControlButton = nullptr;
+lv_obj_t *colorControlLabel = nullptr;
 lv_obj_t *wifiControlButton = nullptr;
 lv_obj_t *bluetoothControlButton = nullptr;
 lv_obj_t *wifiControlStatus = nullptr;
@@ -265,6 +272,9 @@ uint8_t ntpAttempt = 0;
 uint32_t temporaryNtpWifiStartedAt = 0;
 bool pmuReady = false;
 bool lowPowerMode = false;
+// Set once the Power tile has been confirmed. Blocks re-entry into the UI,
+// standby and the main loop while the AXP2101 shutdown sequence runs.
+bool deviceShuttingDown = false;
 bool imageReloadRequested = false;
 bool imageClearRequested = false;
 uint8_t imageCount = 0;
@@ -320,6 +330,16 @@ bool audiobookPageShowRequested = false;
 bool audiobookPageHideRequested = false;
 bool audiobookBooklistVisible = false;
 bool radioPageVisible = false;
+bool worldClockPageVisible = false;
+bool photoFramePageVisible = false;
+bool timerPageVisible = false;
+// Defined in clock_world.inc (included after the app menu); declared here so
+// the shared gesture handler can close the city-list overlay.
+extern bool worldCityListVisible;
+bool timerRunning = false;
+bool timerAlertVisible = false;
+uint32_t timerEndsAt = 0;
+uint32_t timerRemainingMs = 0;
 bool radioPageShowRequested = false;
 bool radioPageHideRequested = false;
 bool radioStationListVisible = false;
@@ -354,6 +374,10 @@ uint16_t weatherSwitchMinutes = DEFAULT_WEATHER_SWITCH_MINUTES;
 uint8_t clockFontIndex = CLOCK_FONT_MONTSERRAT;
 uint8_t pendingClockFontIndex = CLOCK_FONT_MONTSERRAT;
 bool clockFontChangeRequested = false;
+// Clock digit color preset. 0 follows the active OS theme; the other entries
+// are fixed colors the user can pick from the web UI or the control panel.
+uint8_t clockColorIndex = 0;
+bool clockColorChangeRequested = false;
 // UI language (0 = English, 1 = French) and theme (0 = AMOLED black,
 // 1 = CRT amber). Named constants live in clock_i18n.inc / clock_theme.inc.
 uint8_t uiLanguage = 0;
@@ -467,6 +491,31 @@ bool pauseRadioForControlPanel();
 void resumeRadioAfterControlPanel(bool wasPlaying);
 void stopRadioPlayback();
 void updateRadioPageText();
+void createWorldClockPage(lv_obj_t *screen);
+void showWorldClockPage(bool fade = true);
+void hideWorldClockPage(bool fade = true, bool returnToMenu = true);
+void updateWorldClockPage();
+void serviceWorldClock();
+void refreshWorldClockTheme();
+void selectAdjacentWorldCity(int8_t direction);
+void hideWorldCityList();
+void createPhotoFramePage(lv_obj_t *screen);
+void showPhotoFramePage(bool fade = true);
+void hidePhotoFramePage(bool fade = true, bool returnToMenu = true);
+void servicePhotoFrame();
+void refreshPhotoFrameTheme();
+void suspendPhotoFrameForLowPower();
+void selectAdjacentPhoto(int8_t direction);
+void createTimerPage(lv_obj_t *screen);
+void showTimerPage(bool fade = true);
+void hideTimerPage(bool fade = true, bool returnToMenu = true);
+void serviceTimer();
+void updateTimerPageText();
+void refreshTimerTheme();
+void suspendTimerForLowPower();
+void adjustTimerMinutes(int8_t direction);
+void finishTimer();
+void dismissTimerAlert();
 void updateMusicPageText();
 void initUiFonts();
 void applyUiAppearance();
@@ -498,8 +547,11 @@ void markUserActivity();
 void checkAutoSleep();
 uint8_t sleepBrightnessForCurrentTime();
 void enterLowPowerClockMode();
+bool requestDevicePowerOff();
 const lv_font_t *currentClockFont();
 void applyClockFont();
+void applyClockColor();
+void setClockColor(uint8_t color, bool persist);
 void beginScreenFade(uint8_t fromBrightness);
 void endScreenFade(uint8_t toBrightness);
 const char *currentImagePath();
@@ -526,6 +578,9 @@ void serviceAlbumAutoSwitch();
 #include "clock_music.inc"
 #include "clock_audiobook.inc"
 #include "clock_radio.inc"
+#include "clock_world.inc"
+#include "clock_photo.inc"
+#include "clock_timer.inc"
 #include "clock_weather.inc"
 #include "clock_images.inc"
 #include "clock_power.inc"
@@ -584,6 +639,10 @@ void setup() {
 }
 
 void loop() {
+  if (deviceShuttingDown) {
+    delay(100);
+    return;
+  }
   pollPowerKey();
   serviceWeatherSerialCommands();
   if (lowPowerMode) {
@@ -614,6 +673,9 @@ void loop() {
   serviceWeatherWallpaper();
   serviceWeatherInfoPage();
   serviceAlarms();
+  serviceWorldClock();
+  servicePhotoFrame();
+  serviceTimer();
 
   if (webServerStarted && wifiUserEnabled) server.handleClient();
   if (portalActive) dnsServer.processNextRequest();

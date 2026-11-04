@@ -18,16 +18,26 @@ struct RadioStation {
 // Editable preset list. Add your own stations here; a URL containing ".aac"
 // selects the AAC decoder, anything else is treated as MP3.
 static const RadioStation RADIO_STATIONS[] = {
-  {"Radio Paradise", "http://stream-uk1.radioparadise.com/mp3-128"},
-  {"Groove Salad",   "https://ice5.somafm.com/groovesalad-128-mp3"},
-  {"Drone Zone",     "https://ice5.somafm.com/dronezone-128-mp3"},
-  {"FIP",            "http://icecast.radiofrance.fr/fip-midfi.mp3"},
-  {"France Inter",   "http://icecast.radiofrance.fr/franceinter-midfi.mp3"},
-  {"France Culture", "http://icecast.radiofrance.fr/franceculture-midfi.mp3"},
+  // User-requested chillhop / lo-fi defaults.
+  {"FluxFM Chillhop",     "http://channels.fluxfm.de/chillhop/stream.mp3"},
+  {"I Love Chillhop",     "https://streams.ilovemusic.de/iloveradio17.mp3"},
+  {"ChillHop",            "http://stream01.iloveradio.de/iloveradio17.mp3"},
+  {"FluxFM Chillhop 320", "https://streams.fluxfm.de/Chillhop/mp3-320/streams.fluxfm.de/"},
+  {"Le Mellotron",        "https://listen.radioking.com/radio/477719/stream/534044"},
+  {"Lo-Fi Hip-Hop Radio", "https://stream.zeno.fm/0r0xa792kwzuv"},
+  // Original presets kept after the requested defaults.
+  {"Radio Paradise",      "http://stream-uk1.radioparadise.com/mp3-128"},
+  {"Groove Salad",        "https://ice5.somafm.com/groovesalad-128-mp3"},
+  {"Drone Zone",          "https://ice5.somafm.com/dronezone-128-mp3"},
+  {"FIP",                 "http://icecast.radiofrance.fr/fip-midfi.mp3"},
+  {"France Inter",        "http://icecast.radiofrance.fr/franceinter-midfi.mp3"},
+  {"France Culture",      "http://icecast.radiofrance.fr/franceculture-midfi.mp3"},
 };
 constexpr uint8_t RADIO_STATION_COUNT =
   sizeof(RADIO_STATIONS) / sizeof(RADIO_STATIONS[0]);
-constexpr uint32_t RADIO_BUFFER_BYTES = 64U * 1024U;
+// A larger PSRAM ring buffer absorbs Wi-Fi/TLS scheduling jitter and keeps the
+// decoder fed while LVGL, weather or the web server briefly owns the main loop.
+constexpr uint32_t RADIO_BUFFER_BYTES = 320U * 1024U;
 constexpr uint32_t RADIO_RECONNECT_DELAY_MS = 3000;
 constexpr uint32_t RADIO_TITLE_WAIT_MS = 20000;
 
@@ -207,6 +217,8 @@ bool startRadioStation(uint8_t index) {
     setRadioStatus(STR_RADIO_NO_WIFI);
     return false;
   }
+  // Modem sleep is a common cause of periodic MP3 underflow on ESP32-S3.
+  WiFi.setSleep(false);
   // Mutual exclusion with every other audio producer.
   stopMusicPlayback();
   stopAudiobookPlayback();
