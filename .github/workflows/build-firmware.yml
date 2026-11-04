@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: firmware-${{ github.ref }}
@@ -123,6 +124,25 @@ jobs:
             echo "::error title=arduino-cli::Compile failed with exit code ${status}"
             exit "$status"
           fi
+
+      - name: Report compile failure on pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          [ -s compile.log ] || exit 0
+          {
+            echo "### Firmware build failed"
+            echo
+            echo "Tail of \`arduino-cli compile\` output:"
+            echo
+            echo '```text'
+            tail -n 100 compile.log
+            echo '```'
+          } > build-failure.md
+          gh pr comment "$PR_NUMBER" --body-file build-failure.md
 
       - name: Collect firmware artifacts
         run: |
