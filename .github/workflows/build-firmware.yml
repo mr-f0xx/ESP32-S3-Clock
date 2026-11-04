@@ -1,0 +1,257 @@
+name: Build Firmware
+
+# Builds the 16 MB merged firmware image (LVGL_Clock_16MB.merged.bin) with the
+# Arduino CLI, uploads it as a workflow artifact and, for v* tags, attaches it
+# to the matching GitHub release.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "arduino/**"
+      - "scripts/**"
+      - ".github/workflows/build-firmware.yml"
+  pull_request:
+    paths:
+      - "arduino/**"
+      - "scripts/**"
+      - ".github/workflows/build-firmware.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build 16 MB merged firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    env:
+      SKETCH_DIR: arduino/08_LVGL_Clock
+      LIBRARIES_DIR: arduino/libraries
+      ARDUINO_CLI_VERSION: "1.5.1"
+      ESP32_CORE_VERSION: "3.3.10"
+      ESP32_INDEX_URL: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+      # Must match scripts/build_firmware.ps1 and scripts/build_firmware.sh
+      FQBN: esp32:esp32:esp32s3:FlashSize=16M,PartitionScheme=custom,PSRAM=opi,CDCOnBoot=cdc
+      FIRMWARE_NAME: LVGL_Clock_16MB.merged.bin
+      FLASH_SIZE_BYTES: "16777216"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+          df -h /
+
+      - name: Cache Arduino core and tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/arduino-data
+            ~/arduino-user
+          key: arduino-${{ runner.os }}-cli${{ env.ARDUINO_CLI_VERSION }}-esp32-${{ env.ESP32_CORE_VERSION }}
+          restore-keys: |
+            arduino-${{ runner.os }}-cli${{ env.ARDUINO_CLI_VERSION }}-esp32-
+
+      - name: Install arduino-cli
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/arduino-cli.tar.gz \
+            "https://github.com/arduino/arduino-cli/releases/download/v${ARDUINO_CLI_VERSION}/arduino-cli_${ARDUINO_CLI_VERSION}_Linux_64bit.tar.gz"
+          sudo tar -xzf /tmp/arduino-cli.tar.gz -C /usr/local/bin arduino-cli
+          arduino-cli version
+
+      - name: Install ESP32 Arduino core
+        run: |
+          set -euo pipefail
+          export ARDUINO_DIRECTORIES_DATA="$HOME/arduino-data"
+          export ARDUINO_DIRECTORIES_USER="$HOME/arduino-user"
+          {
+            echo "ARDUINO_DIRECTORIES_DATA=$ARDUINO_DIRECTORIES_DATA"
+            echo "ARDUINO_DIRECTORIES_USER=$ARDUINO_DIRECTORIES_USER"
+          } >> "$GITHUB_ENV"
+
+          arduino-cli core update-index --additional-urls "$ESP32_INDEX_URL"
+          if arduino-cli core list | awk '{print $1, $2}' | grep -qx "esp32:esp32 ${ESP32_CORE_VERSION}"; then
+            echo "esp32:esp32@${ESP32_CORE_VERSION} already installed (cache hit)"
+          else
+            arduino-cli core install "esp32:esp32@${ESP32_CORE_VERSION}" --additional-urls "$ESP32_INDEX_URL"
+          fi
+          arduino-cli core list
+
+      - name: Prepare weather config
+        run: |
+          set -euo pipefail
+          # clock_weather_config.h is git-ignored (it normally holds a private
+          # QWeather key). CI builds the public firmware from the template so the
+          # API host/key are configured on the device web UI instead.
+          if [ -f "$SKETCH_DIR/clock_weather_config.h" ]; then
+            echo "Using existing $SKETCH_DIR/clock_weather_config.h"
+          else
+            cp "$SKETCH_DIR/clock_weather_config.example.h" "$SKETCH_DIR/clock_weather_config.h"
+            echo "Created $SKETCH_DIR/clock_weather_config.h from example template"
+          fi
+
+      - name: Compile firmware
+        run: |
+          set -uo pipefail
+          arduino-cli compile \
+            --fqbn "$FQBN" \
+            --libraries "$GITHUB_WORKSPACE/$LIBRARIES_DIR" \
+            --build-path "$GITHUB_WORKSPACE/build" \
+            --warnings none \
+            "$SKETCH_DIR" 2>&1 | tee "$GITHUB_WORKSPACE/compile.log"
+          status="${PIPESTATUS[0]}"
+          if [ "$status" -ne 0 ]; then
+            # Surface compiler diagnostics as check annotations so they show up
+            # in the PR checks view without opening the full job log.
+            grep -nE "error:|fatal error|undefined reference|No such file" "$GITHUB_WORKSPACE/compile.log" \
+              | head -n 10 \
+              | while IFS= read -r line; do
+                  echo "::error title=Compile error::${line}"
+                done
+            echo "::error title=arduino-cli::Compile failed with exit code ${status}"
+            exit "$status"
+          fi
+
+      - name: Report compile failure on pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          [ -s compile.log ] || exit 0
+          {
+            echo "### Firmware build failed"
+            echo
+            echo "Tail of \`arduino-cli compile\` output:"
+            echo
+            echo '```text'
+            tail -n 100 compile.log
+            echo '```'
+          } > build-failure.md
+          gh pr comment "$PR_NUMBER" --body-file build-failure.md
+
+      - name: Collect firmware artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          merged_bin="$(find build -maxdepth 1 -name '*.merged.bin' -print -quit)"
+          if [ -z "$merged_bin" ]; then
+            echo "::error::Merged firmware image was not produced by the core (expected build/*.merged.bin)"
+            ls -la build
+            exit 1
+          fi
+          cp "$merged_bin" "dist/$FIRMWARE_NAME"
+
+          app_bin="$(find build -maxdepth 1 -name '*.ino.bin' -print -quit)"
+          if [ -n "$app_bin" ]; then
+            cp "$app_bin" dist/LVGL_Clock_app.bin
+          fi
+
+          size="$(stat -c '%s' "dist/$FIRMWARE_NAME")"
+          if [ "$size" -ne "$FLASH_SIZE_BYTES" ]; then
+            echo "::error::Unexpected firmware size $size bytes (expected $FLASH_SIZE_BYTES)"
+            exit 1
+          fi
+
+          ( cd dist && sha256sum "$FIRMWARE_NAME" > SHA256SUMS.txt )
+          if [ -f dist/LVGL_Clock_app.bin ]; then
+            ( cd dist && sha256sum LVGL_Clock_app.bin >> SHA256SUMS.txt )
+          fi
+
+          {
+            echo "commit=${GITHUB_SHA}"
+            echo "ref=${GITHUB_REF_NAME}"
+            echo "built=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+            echo "arduino-cli=${ARDUINO_CLI_VERSION}"
+            echo "esp32-core=${ESP32_CORE_VERSION}"
+            echo "fqbn=${FQBN}"
+            echo "size=${size}"
+          } > dist/BUILD_INFO.txt
+
+          {
+            echo "# ESP32-S3 AMOLED LVGL Clock — ${GITHUB_REF_NAME}"
+            echo
+            echo "- 提交 / Commit: \`${GITHUB_SHA}\`"
+            echo "- 构建时间 / Built: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo "- Arduino-ESP32 core: ${ESP32_CORE_VERSION} (arduino-cli ${ARDUINO_CLI_VERSION})"
+            echo "- FQBN: \`${FQBN}\`"
+            echo "- 固件大小 / Size: ${size} bytes (16 MB)"
+            echo
+            echo "## 下载 / Assets"
+            echo
+            echo "- \`$FIRMWARE_NAME\` — 16 MB 完整合并固件，烧录地址 \`0x0\`"
+            echo "- \`LVGL_Clock_app.bin\` — 仅应用分区，烧录地址 \`0x10000\`"
+            echo "- \`SHA256SUMS.txt\`, \`BUILD_INFO.txt\`"
+            echo
+            echo "## 烧录 / Flashing"
+            echo
+            echo "1. 打开乐鑫 **Flash Download Tool**，选择 \`ESP32-S3\` / \`Develop\` / \`UART\`。"
+            echo "2. 选择 \`$FIRMWARE_NAME\`，勾选并填写地址 \`0x0\`。"
+            echo "3. SPI SPEED \`40MHz\`，SPI MODE \`DIO\`，FLASH SIZE \`16MB\`，BAUD \`460800\`。"
+            echo "4. 选择串口后点击 \`START\`，显示 \`FINISH\` 即完成。"
+            echo
+            echo "> 该镜像是公开构建，不包含个人天气 API Key；烧录后请在设备网页设置中重新配置 Wi-Fi 与和风天气。"
+            echo
+            echo "## SHA-256"
+            echo
+            echo '```text'
+            cat dist/SHA256SUMS.txt
+            echo '```'
+          } > dist/RELEASE_NOTES.md
+
+          ls -la dist
+          cat dist/SHA256SUMS.txt
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LVGL_Clock_16MB-firmware
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          assets=(dist/*.bin dist/SHA256SUMS.txt dist/BUILD_INFO.txt)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" \
+              --title "ESP32-S3 LVGL Clock $tag" \
+              --notes-file dist/RELEASE_NOTES.md \
+              --verify-tag
+          fi
+
+      - name: Job summary
+        run: |
+          {
+            echo "### Firmware build"
+            echo
+            echo "- \`$FIRMWARE_NAME\` — $(stat -c '%s' "dist/$FIRMWARE_NAME") bytes"
+            echo "- FQBN: \`$FQBN\`"
+            echo "- Core: \`esp32:esp32@$ESP32_CORE_VERSION\`"
+            echo
+            echo '```text'
+            cat dist/SHA256SUMS.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
