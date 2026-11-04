@@ -303,6 +303,12 @@ void createClockUi() {
   createTablerIcon(settingsButton, TABLER_ICON_ADJUSTMENTS, 28, themeIcon());
   lv_obj_add_flag(settingsButton, LV_OBJ_FLAG_HIDDEN);
 
+  // Put the base clock on the panel before constructing the heavier launcher
+  // and app pages. If a later UI allocation ever fails, the device is not left
+  // showing a completely black screen while the boot code halts.
+  lv_obj_invalidate(lv_scr_act());
+  lv_refr_now(nullptr);
+
   createControlPanel();
   createAppMenu();
 }
@@ -490,6 +496,12 @@ bool initDisplayAndLvgl() {
   }
 
   createClockUi();
+  lv_mem_monitor_t uiMemory;
+  lv_mem_monitor(&uiMemory);
+  Serial.printf("LVGL object pool: %u KiB total, %u KiB free, %u%% fragmented\n",
+                static_cast<unsigned>(uiMemory.total_size / 1024U),
+                static_cast<unsigned>(uiMemory.free_size / 1024U),
+                static_cast<unsigned>(uiMemory.frag_pct));
   updateScreenOrientation(true);
   lv_timer_handler();
   Serial.println("LVGL ready");

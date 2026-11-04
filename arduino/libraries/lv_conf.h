@@ -49,13 +49,15 @@
 #define LV_MEM_CUSTOM 0
 #if LV_MEM_CUSTOM == 0
     /*Size of the memory available for `lv_mem_alloc()` in bytes (>= 2kB)*/
-    #define LV_MEM_SIZE (96U * 1024U)          /*[bytes]*/
+    #define LV_MEM_SIZE (192U * 1024U)         /*[bytes]*/
 
     /*Set an address for the memory pool instead of allocating it as a normal array. Can be in external SRAM too.*/
     #define LV_MEM_ADR 0     /*0: unused*/
     /*Allocate LVGL's fixed TLSF pool in PSRAM. LVGL objects, styles and text
-     *remain managed by lv_mem_*; only the backing 96 KiB pool moves out of
-     *internal SRAM. Display and I2S DMA buffers use separate allocations.*/
+     *remain managed by lv_mem_*; only the backing 192 KiB pool moves out of
+     *internal SRAM. Display and I2S DMA buffers use separate allocations.
+     *The larger pool gives the launcher, app pages and modal overlays enough
+     *headroom that constructing the UI cannot exhaust LVGL's heap at boot.*/
     #if LV_MEM_ADR == 0
         #define LV_MEM_POOL_INCLUDE <esp_heap_caps.h>
         #define LV_MEM_POOL_ALLOC(size) heap_caps_malloc((size), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)

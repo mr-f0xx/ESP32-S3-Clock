@@ -233,7 +233,7 @@ void worldBackEvent(lv_event_t *event) {
 }
 
 void showWorldClockPage(bool fade) {
-  if (!worldClockPage || lowPowerMode || worldClockPageVisible) return;
+  if (lowPowerMode || worldClockPageVisible) return;
   if (fade) {
     beginScreenFade(activeBrightness);
     hideAppMenu(false);
@@ -243,6 +243,8 @@ void showWorldClockPage(bool fade) {
     endScreenFade(activeBrightness);
     return;
   }
+  if (!worldClockPage) createWorldClockPage(lv_scr_act());
+  if (!worldClockPage) return;
   worldClockPageVisible = true;
   worldLastUpdateAt = 0;
   lv_obj_clear_flag(worldClockPage, LV_OBJ_FLAG_HIDDEN);
