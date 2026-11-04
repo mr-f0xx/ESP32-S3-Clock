@@ -26,3 +26,6 @@ arduino/libraries/ESP32_JPEG/
 arduino/libraries/lvgl/demos/
 arduino/libraries/lvgl/src/demos/
 arduino/libraries/lvgl/env_support/
+
+# CI build output
+dist/
