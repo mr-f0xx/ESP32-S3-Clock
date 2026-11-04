@@ -525,7 +525,9 @@ lv_obj_t *createControlButton(lv_obj_t *parent, int16_t y,
 }
 
 // Compact pill buttons in the control panel's top-right corner cycle the UI
-// language (EN/FR) and theme (black/CRT amber) without leaving the panel.
+// language (EN/FR), clock color and theme without leaving the panel.
+void updateControlPillLabels();
+
 void languageControlEvent(lv_event_t *event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
   markUserActivity();

@@ -333,6 +333,9 @@ bool radioPageVisible = false;
 bool worldClockPageVisible = false;
 bool photoFramePageVisible = false;
 bool timerPageVisible = false;
+// Defined in clock_world.inc (included after the app menu); declared here so
+// the shared gesture handler can close the city-list overlay.
+extern bool worldCityListVisible;
 bool timerRunning = false;
 bool timerAlertVisible = false;
 uint32_t timerEndsAt = 0;
