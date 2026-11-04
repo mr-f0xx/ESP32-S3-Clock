@@ -4,14 +4,15 @@
 constexpr uint8_t MUSIC_TRACK_LIMIT = 64;
 constexpr uint32_t MUSIC_SD_FREQUENCY = 20000000;
 constexpr uint32_t MUSIC_DEFAULT_SAMPLE_RATE = 44100;
-// Reserve I2S before the video DMA arena fragments internal SRAM. Sixteen
-// 2048 B descriptors provide 8192 stereo frames: ~186 ms of headroom at
-// 44.1 kHz (radio / music) and ~341 ms at 24 kHz (video sidecar). The deep queue
-// rides out a full LVGL recomposition, a JPEG core burst or a TLS read without
-// the DMA running dry, which is what produced the audible radio stutter.
-// 2048 B per descriptor stays under the ESP-IDF 4092 B DMA buffer limit.
-constexpr uint8_t MUSIC_I2S_DMA_BUFFER_COUNT = 16;
-constexpr uint16_t MUSIC_I2S_DMA_BUFFER_BYTES = 2048;
+// Reserve I2S before the video DMA arena fragments internal SRAM. Keep the
+// v1.1.0 queue (10 x 1024 B = 2560 stereo frames, ~58 ms at 44.1 kHz): growing
+// it to 32 KB starved the shared internal DMA pool that the weather TLS window
+// and the video arena also need, and destabilized the device. The radio stutter
+// is instead fixed at its source -- the radio page no longer forces whole-screen
+// LVGL recomposition, the main loop services audio every 1 ms while streaming,
+// and Wi-Fi modem sleep stays off -- so this modest queue stays full.
+constexpr uint8_t MUSIC_I2S_DMA_BUFFER_COUNT = 10;
+constexpr uint16_t MUSIC_I2S_DMA_BUFFER_BYTES = 1024;
 
 lv_obj_t *musicProgressBar = nullptr;
 uint32_t musicProgressLastUpdateAt = 0;
