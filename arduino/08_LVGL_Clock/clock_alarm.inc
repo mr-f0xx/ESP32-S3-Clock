@@ -45,15 +45,21 @@ void updateAlarmSlotStyles() {
   for (uint8_t i = 0; i < ALARM_SLOT_COUNT; ++i) {
     if (!alarmSlotButtons[i]) continue;
     const bool selected = i == selectedAlarmSlot;
-    lv_obj_set_style_bg_color(
-      alarmSlotButtons[i],
-      lv_color_hex(selected ? 0x7A2945 :
-                   (alarmEnabled[i] ? 0x293047 : 0x1B1E27)),
-      LV_PART_MAIN);
+    uint32_t background;
+    if (themeIsAmber()) {
+      background = selected ? 0x2A1D00 : 0x000000;
+    } else {
+      background = selected ? 0x7A2945 : (alarmEnabled[i] ? 0x293047 : 0x101014);
+    }
+    lv_obj_set_style_bg_color(alarmSlotButtons[i], lv_color_hex(background),
+                              LV_PART_MAIN);
     lv_obj_set_style_border_color(
       alarmSlotButtons[i],
-      lv_color_hex(selected ? UI_ACCENT_ROSE : 0x343846),
+      lv_color_hex(selected ? themeAccent(UI_ACCENT_ROSE) : themeBorder(0x343846)),
       LV_PART_MAIN);
+    if (lv_obj_get_child_cnt(alarmSlotButtons[i]))
+      lv_obj_set_style_text_color(lv_obj_get_child(alarmSlotButtons[i], 0),
+                                  themeText(), LV_PART_MAIN);
   }
 }
 
@@ -74,10 +80,12 @@ void syncAlarmUi() {
   }
   if (alarmToggleStatusLabel) {
     const bool enabled = alarmEnabled[selectedAlarmSlot];
-    lv_label_set_text(alarmToggleStatusLabel, enabled ? "ON" : "OFF");
+    lv_label_set_text(alarmToggleStatusLabel,
+                      enabled ? tr(STR_ALARM_ON) : tr(STR_ALARM_OFF));
     lv_obj_set_style_text_color(
       alarmToggleStatusLabel,
-      lv_color_hex(enabled ? UI_ACCENT_ROSE : 0x73798A), LV_PART_MAIN);
+      lv_color_hex(enabled ? themeAccent(UI_ACCENT_ROSE) : themeSurface(0x73798A)),
+      LV_PART_MAIN);
   }
   updateAlarmSlotStyles();
 }
@@ -266,7 +274,7 @@ lv_obj_t *createAlarmSlotButton(uint8_t index, int16_t x) {
   lv_obj_t *label = lv_label_create(button);
   char number[2] = {static_cast<char>('1' + index), '\0'};
   lv_label_set_text(label, number);
-  lv_obj_set_style_text_font(label, &lv_font_montserrat_22, 0);
+  lv_obj_set_style_text_font(label, &lv_font_ui_22, 0);
   lv_obj_center(label);
   return button;
 }
@@ -277,9 +285,9 @@ lv_obj_t *createAlarmAdjustButton(uint8_t action, int16_t x, int16_t y,
   lv_obj_set_size(button, 76, 76);
   lv_obj_align(button, LV_ALIGN_TOP_MID, x, y);
   lv_obj_set_style_radius(button, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(button, lv_color_hex(0x20232D), 0);
+  lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0A0A0A)), 0);
   lv_obj_set_style_border_width(button, 1, 0);
-  lv_obj_set_style_border_color(button, lv_color_hex(0x454B5D), 0);
+  lv_obj_set_style_border_color(button, lv_color_hex(themeBorder(0x454B5D)), 0);
   lv_obj_set_style_shadow_width(button, 0, 0);
   lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(button, LV_OBJ_FLAG_GESTURE_BUBBLE);
@@ -288,7 +296,7 @@ lv_obj_t *createAlarmAdjustButton(uint8_t action, int16_t x, int16_t y,
   lv_obj_t *label = lv_label_create(button);
   lv_label_set_text(label, symbol);
   lv_obj_set_style_text_font(label, &lv_font_montserrat_48, 0);
-  lv_obj_set_style_text_color(label, lv_color_white(), 0);
+  lv_obj_set_style_text_color(label, themeText(), 0);
   lv_obj_align(label, LV_ALIGN_CENTER, 0, strcmp(symbol, "-") == 0 ? -3 : 0);
   return button;
 }
@@ -298,7 +306,7 @@ void createAlarmPage(lv_obj_t *screen) {
   lv_obj_remove_style_all(alarmPage);
   lv_obj_set_size(alarmPage, SCREEN_WIDTH, SCREEN_HEIGHT);
   lv_obj_set_pos(alarmPage, 0, 0);
-  lv_obj_set_style_bg_color(alarmPage, lv_color_hex(0x0D0F14), 0);
+  lv_obj_set_style_bg_color(alarmPage, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(alarmPage, LV_OPA_COVER, 0);
   lv_obj_clear_flag(alarmPage, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(alarmPage, LV_OBJ_FLAG_CLICKABLE);
@@ -308,7 +316,7 @@ void createAlarmPage(lv_obj_t *screen) {
   lv_obj_add_event_cb(alarmPage, appPageGestureEvent, LV_EVENT_GESTURE, nullptr);
 
   createTablerIcon(alarmPage, TABLER_ICON_ALARM, 42,
-                   lv_color_hex(UI_ACCENT_ROSE));
+                   lv_color_hex(themeAccent(UI_ACCENT_ROSE)));
   lv_obj_t *headerIcon = lv_obj_get_child(
     alarmPage, lv_obj_get_child_cnt(alarmPage) - 1);
   lv_obj_align(headerIcon, LV_ALIGN_TOP_LEFT, 25, 29);
@@ -327,45 +335,44 @@ void createAlarmPage(lv_obj_t *screen) {
   alarmHourLabel = lv_label_create(alarmPage);
   lv_label_set_text(alarmHourLabel, "00");
   lv_obj_set_style_text_font(alarmHourLabel, &lv_font_montserrat_alarm_bold_96, 0);
-  lv_obj_set_style_text_color(alarmHourLabel, lv_color_white(), 0);
+  lv_obj_set_style_text_color(alarmHourLabel, themeText(), 0);
   lv_obj_align(alarmHourLabel, LV_ALIGN_TOP_MID, -106, 199);
 
   alarmMinuteLabel = lv_label_create(alarmPage);
   lv_label_set_text(alarmMinuteLabel, "00");
   lv_obj_set_style_text_font(alarmMinuteLabel, &lv_font_montserrat_alarm_bold_96, 0);
-  lv_obj_set_style_text_color(alarmMinuteLabel, lv_color_white(), 0);
+  lv_obj_set_style_text_color(alarmMinuteLabel, themeText(), 0);
   lv_obj_align(alarmMinuteLabel, LV_ALIGN_TOP_MID, 106, 199);
 
   lv_obj_t *colon = lv_label_create(alarmPage);
   lv_label_set_text(colon, ":");
   lv_obj_set_style_text_font(colon, &lv_font_montserrat_alarm_bold_96, 0);
-  lv_obj_set_style_text_color(colon, lv_color_white(), 0);
+  lv_obj_set_style_text_color(colon, themeText(), 0);
   lv_obj_align(colon, LV_ALIGN_TOP_MID, 0, 199);
 
   alarmToggleButton = lv_switch_create(alarmPage);
   lv_obj_set_size(alarmToggleButton, 106, 48);
   lv_obj_align(alarmToggleButton, LV_ALIGN_BOTTOM_MID, -28, -22);
   lv_obj_set_style_radius(alarmToggleButton, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(alarmToggleButton, lv_color_hex(0x20232D),
+  lv_obj_set_style_bg_color(alarmToggleButton, lv_color_hex(themeSurface(0x0A0A0A)),
                             LV_PART_MAIN);
-  lv_obj_set_style_bg_color(alarmToggleButton, lv_color_hex(UI_ACCENT_ROSE),
+  lv_obj_set_style_bg_color(alarmToggleButton, lv_color_hex(themeAccent(UI_ACCENT_ROSE)),
                             LV_PART_INDICATOR | LV_STATE_CHECKED);
   lv_obj_set_style_bg_opa(alarmToggleButton, LV_OPA_COVER,
                           LV_PART_INDICATOR | LV_STATE_CHECKED);
-  lv_obj_set_style_bg_color(alarmToggleButton, lv_color_hex(0xF5F3FF),
-                            LV_PART_KNOB);
+  lv_obj_set_style_bg_color(alarmToggleButton, themeText(), LV_PART_KNOB);
   lv_obj_set_style_pad_all(alarmToggleButton, 5, LV_PART_KNOB);
   lv_obj_set_style_border_width(alarmToggleButton, 1, 0);
-  lv_obj_set_style_border_color(alarmToggleButton, lv_color_hex(0x454B5D), 0);
+  lv_obj_set_style_border_color(alarmToggleButton, lv_color_hex(themeBorder(0x454B5D)), 0);
   lv_obj_clear_flag(alarmToggleButton, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(alarmToggleButton, LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_event_cb(alarmToggleButton, alarmToggleEvent,
                       LV_EVENT_VALUE_CHANGED, nullptr);
 
   alarmToggleStatusLabel = lv_label_create(alarmPage);
-  lv_label_set_text(alarmToggleStatusLabel, "OFF");
-  lv_obj_set_width(alarmToggleStatusLabel, 64);
-  lv_obj_set_style_text_font(alarmToggleStatusLabel, &lv_font_montserrat_22, 0);
+  lv_label_set_text(alarmToggleStatusLabel, tr(STR_ALARM_OFF));
+  lv_obj_set_width(alarmToggleStatusLabel, 90);
+  lv_obj_set_style_text_font(alarmToggleStatusLabel, &lv_font_ui_22, 0);
   lv_obj_set_style_text_letter_space(alarmToggleStatusLabel, 2, 0);
   lv_obj_set_style_text_align(alarmToggleStatusLabel, LV_TEXT_ALIGN_LEFT, 0);
   lv_obj_align_to(alarmToggleStatusLabel, alarmToggleButton,
@@ -378,30 +385,87 @@ void createAlarmPage(lv_obj_t *screen) {
   lv_obj_remove_style_all(alarmAlertOverlay);
   lv_obj_set_size(alarmAlertOverlay, SCREEN_WIDTH, SCREEN_HEIGHT);
   lv_obj_set_pos(alarmAlertOverlay, 0, 0);
-  lv_obj_set_style_bg_color(alarmAlertOverlay, lv_color_hex(0x0D0F14), 0);
+  lv_obj_set_style_bg_color(alarmAlertOverlay, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(alarmAlertOverlay, LV_OPA_COVER, 0);
   lv_obj_clear_flag(alarmAlertOverlay, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(alarmAlertOverlay, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(alarmAlertOverlay, alarmAlertGestureEvent,
                       LV_EVENT_GESTURE, nullptr);
   lv_obj_t *alertIcon = createTablerIcon(
-    alarmAlertOverlay, TABLER_ICON_ALARM, 92, lv_color_hex(UI_ACCENT_ROSE));
+    alarmAlertOverlay, TABLER_ICON_ALARM, 92, lv_color_hex(themeAccent(UI_ACCENT_ROSE)));
   lv_obj_align(alertIcon, LV_ALIGN_TOP_MID, 0, 58);
   alarmAlertTimeLabel = lv_label_create(alarmAlertOverlay);
   lv_obj_set_style_text_font(alarmAlertTimeLabel, &lv_font_montserrat_48, 0);
-  lv_obj_set_style_text_color(alarmAlertTimeLabel, lv_color_white(), 0);
+  lv_obj_set_style_text_color(alarmAlertTimeLabel, themeText(), 0);
   lv_obj_align(alarmAlertTimeLabel, LV_ALIGN_CENTER, 0, 18);
   alarmAlertSlotLabel = lv_label_create(alarmAlertOverlay);
-  lv_obj_set_style_text_font(alarmAlertSlotLabel, &lv_font_montserrat_22, 0);
-  lv_obj_set_style_text_color(alarmAlertSlotLabel, lv_color_hex(0x8B92A3), 0);
+  lv_obj_set_style_text_font(alarmAlertSlotLabel, &lv_font_ui_22, 0);
+  lv_obj_set_style_text_color(alarmAlertSlotLabel, themeTextDim(0x8B92A3), 0);
   lv_obj_align(alarmAlertSlotLabel, LV_ALIGN_CENTER, 0, 72);
   lv_obj_t *dismissButton = lv_btn_create(alarmAlertOverlay);
   lv_obj_set_size(dismissButton, 72, 72);
   lv_obj_align(dismissButton, LV_ALIGN_BOTTOM_MID, 0, -44);
   lv_obj_set_style_radius(dismissButton, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(dismissButton, lv_color_hex(0x20232D), 0);
+  lv_obj_set_style_bg_color(dismissButton, lv_color_hex(themeSurface(0x0A0A0A)), 0);
+  lv_obj_set_style_border_width(dismissButton, 1, 0);
+  lv_obj_set_style_border_color(dismissButton, lv_color_hex(themeBorder(0x454B5D)), 0);
   lv_obj_set_style_shadow_width(dismissButton, 0, 0);
   lv_obj_add_event_cb(dismissButton, alarmAlertDismissEvent, LV_EVENT_CLICKED, nullptr);
-  createTablerIcon(dismissButton, TABLER_ICON_X, 34);
+  createTablerIcon(dismissButton, TABLER_ICON_X, 34, themeIcon());
   lv_obj_add_flag(alarmAlertOverlay, LV_OBJ_FLAG_HIDDEN);
+}
+
+// Re-apply the active theme to the alarm editor and its full-screen alert.
+void refreshAlarmTheme() {
+  if (!alarmPage) return;
+  lv_obj_set_style_bg_color(alarmPage, themePageBackground(), 0);
+  const uint32_t childCount = lv_obj_get_child_cnt(alarmPage);
+  for (uint32_t i = 0; i < childCount; ++i) {
+    lv_obj_t *child = lv_obj_get_child(alarmPage, i);
+    if (lv_obj_check_type(child, &lv_label_class)) {
+      if (child != alarmToggleStatusLabel)
+        lv_obj_set_style_text_color(child, themeText(), 0);
+    } else if (lv_obj_check_type(child, &lv_switch_class)) {
+      lv_obj_set_style_bg_color(child, lv_color_hex(themeSurface(0x0A0A0A)),
+                                LV_PART_MAIN);
+      lv_obj_set_style_bg_color(child, lv_color_hex(themeAccent(UI_ACCENT_ROSE)),
+                                LV_PART_INDICATOR | LV_STATE_CHECKED);
+      lv_obj_set_style_bg_color(child, themeText(), LV_PART_KNOB);
+      lv_obj_set_style_border_color(child, lv_color_hex(themeBorder(0x454B5D)), 0);
+    } else if (lv_obj_check_type(child, &lv_btn_class)) {
+      bool isSlot = false;
+      for (uint8_t s = 0; s < ALARM_SLOT_COUNT; ++s)
+        if (alarmSlotButtons[s] == child) isSlot = true;
+      if (!isSlot) {
+        lv_obj_set_style_bg_color(child, lv_color_hex(themeSurface(0x0A0A0A)), 0);
+        lv_obj_set_style_border_color(child, lv_color_hex(themeBorder(0x454B5D)), 0);
+        if (lv_obj_get_child_cnt(child))
+          lv_obj_set_style_text_color(lv_obj_get_child(child, 0), themeText(), 0);
+      }
+    } else {
+      // Header alarm icon (vector layer).
+      setTablerIconColor(child, lv_color_hex(themeAccent(UI_ACCENT_ROSE)));
+    }
+  }
+  syncAlarmUi();
+
+  if (alarmAlertOverlay) {
+    lv_obj_set_style_bg_color(alarmAlertOverlay, themePageBackground(), 0);
+    if (alarmAlertTimeLabel)
+      lv_obj_set_style_text_color(alarmAlertTimeLabel, themeText(), 0);
+    if (alarmAlertSlotLabel)
+      lv_obj_set_style_text_color(alarmAlertSlotLabel, themeTextDim(0x8B92A3), 0);
+    const uint32_t alertChildren = lv_obj_get_child_cnt(alarmAlertOverlay);
+    for (uint32_t i = 0; i < alertChildren; ++i) {
+      lv_obj_t *child = lv_obj_get_child(alarmAlertOverlay, i);
+      if (lv_obj_check_type(child, &lv_btn_class)) {
+        lv_obj_set_style_bg_color(child, lv_color_hex(themeSurface(0x0A0A0A)), 0);
+        lv_obj_set_style_border_color(child, lv_color_hex(themeBorder(0x454B5D)), 0);
+        if (lv_obj_get_child_cnt(child))
+          setTablerIconColor(lv_obj_get_child(child, 0), themeIcon());
+      } else if (!lv_obj_check_type(child, &lv_label_class)) {
+        setTablerIconColor(child, lv_color_hex(themeAccent(UI_ACCENT_ROSE)));
+      }
+    }
+  }
 }

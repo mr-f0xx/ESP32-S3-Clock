@@ -27,6 +27,8 @@ constexpr int16_t CONTROL_PANEL_GESTURE_EDGE = 72;
 bool controlPanelSuspendedWeather = false;
 bool controlPanelSuspendedMusic = false;
 bool controlPanelMusicWasPlaying = false;
+bool controlPanelSuspendedAudiobook = false;
+bool controlPanelAudiobookWasPlaying = false;
 bool controlPanelWeatherRevealPending = false;
 uint32_t controlPanelWeatherRevealBaseline = 0;
 uint32_t controlPanelWeatherRevealDeadline = 0;
@@ -34,10 +36,14 @@ uint32_t controlPanelWeatherRevealDeadline = 0;
 void suspendControlPanelUnderlyingApp() {
   controlPanelSuspendedWeather = weatherPageVisible;
   controlPanelSuspendedMusic = musicPageVisible;
+  controlPanelSuspendedAudiobook = audiobookPageVisible;
   controlPanelMusicWasPlaying = false;
+  controlPanelAudiobookWasPlaying = false;
   if (controlPanelSuspendedWeather) pauseWeatherWallpaperForControlPanel();
   if (controlPanelSuspendedMusic)
     controlPanelMusicWasPlaying = pauseMusicForControlPanel();
+  if (controlPanelSuspendedAudiobook)
+    controlPanelAudiobookWasPlaying = pauseAudiobookForControlPanel();
 }
 
 void resumeControlPanelUnderlyingApp() {
@@ -45,9 +51,13 @@ void resumeControlPanelUnderlyingApp() {
     resumeWeatherWallpaperAfterControlPanel();
   if (controlPanelSuspendedMusic && musicPageVisible)
     resumeMusicAfterControlPanel(controlPanelMusicWasPlaying);
+  if (controlPanelSuspendedAudiobook && audiobookPageVisible)
+    resumeAudiobookAfterControlPanel(controlPanelAudiobookWasPlaying);
   controlPanelSuspendedWeather = false;
   controlPanelSuspendedMusic = false;
   controlPanelMusicWasPlaying = false;
+  controlPanelSuspendedAudiobook = false;
+  controlPanelAudiobookWasPlaying = false;
 }
 
 void showControlPanel(bool fade = true) {
@@ -156,19 +166,19 @@ void mainUiGestureEvent(lv_event_t *event) {
     hideAlarmPage(true, true);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
       !alarmPageVisible &&
-      !musicPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
+      !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
       direction == LV_DIR_LEFT) {
     gestureStartY = -1;
     handleGlobalNavigationStep(1);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
              !alarmPageVisible &&
-             !musicPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
+             !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
              direction == LV_DIR_RIGHT) {
     gestureStartY = -1;
     handleGlobalNavigationStep(-1);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
              !alarmPageVisible &&
-             !musicPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
+             !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
              direction == LV_DIR_BOTTOM &&
       gestureStartY >= 0 && gestureStartY <= CONTROL_PANEL_GESTURE_EDGE) {
     gestureStartY = -1;
@@ -179,20 +189,20 @@ void mainUiGestureEvent(lv_event_t *event) {
     hideControlPanel(true);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
              !alarmPageVisible &&
-             !musicPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
+             !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
              direction == LV_DIR_TOP &&
              gestureStartY >= SCREEN_HEIGHT - CONTROL_PANEL_GESTURE_EDGE) {
     gestureStartY = -1;
     showAppMenu(true);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
-             !alarmPageVisible && !musicPageVisible && !weatherPageVisible &&
+             !alarmPageVisible && !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible &&
              !weatherInfoPageVisible &&
              direction == LV_DIR_BOTTOM) {
     gestureStartX = -1;
     gestureStartY = -1;
     handleGlobalNavigationStep(-1);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
-             !alarmPageVisible && !musicPageVisible && !weatherPageVisible &&
+             !alarmPageVisible && !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible &&
              !weatherInfoPageVisible &&
              direction == LV_DIR_TOP) {
     gestureStartX = -1;
@@ -282,16 +292,28 @@ bool updateBatteryPanelStatus() {
   String percentText;
   uint32_t colorValue;
   if (!connected) {
-    percentText = "NO BAT";
-    colorValue = 0x9299A3;
+    percentText = tr(STR_NO_BAT);
+    colorValue = themeIsAmber() ? CRT_AMBER_DIM : 0x9299A3;
   } else {
     percentText = String(percent) + "%";
-    colorValue = charging ? 0x45D483 : (percent <= 10 ? 0xFF5B62 : 0xFFFFFF);
+    if (themeIsAmber()) {
+      colorValue = percent <= 10 ? CRT_AMBER_DIM : CRT_AMBER;
+    } else {
+      colorValue = charging ? 0x45D483 : (percent <= 10 ? 0xFF5B62 : 0xFFFFFF);
+    }
   }
 
   static String displayedPercentText;
   static uint32_t displayedColorValue = 0xFFFFFFFF;
   static const lv_img_dsc_t *displayedImage = nullptr;
+  static uint8_t displayedBatteryTheme = 0xFF;
+  static uint8_t displayedBatteryLanguage = 0xFF;
+  if (displayedBatteryTheme != uiTheme || displayedBatteryLanguage != uiLanguage) {
+    displayedBatteryTheme = uiTheme;
+    displayedBatteryLanguage = uiLanguage;
+    displayedColorValue = 0xFFFFFFFF;
+    displayedPercentText = "";
+  }
   bool changed = false;
   const lv_img_dsc_t *image = batteryTablerImage(connected, charging, percent);
   if (displayedImage != image) {
@@ -493,13 +515,57 @@ lv_obj_t *createControlButton(lv_obj_t *parent, int16_t y,
   *status = lv_label_create(parent);
   lv_obj_set_size(*status, 185, 28);
   lv_label_set_long_mode(*status, LV_LABEL_LONG_DOT);
-  lv_obj_set_style_text_font(*status, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_font(*status, &lv_font_ui_20, 0);
   lv_obj_set_style_text_align(*status, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_bg_color(*status, lv_color_hex(0x101114), 0);
+  lv_obj_set_style_bg_color(*status, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(*status, LV_OPA_COVER, 0);
   lv_obj_set_style_pad_all(*status, 0, 0);
   lv_obj_align_to(*status, button, LV_ALIGN_OUT_BOTTOM_MID, 0, 7);
   return button;
+}
+
+// Compact pill buttons in the control panel's top-right corner cycle the UI
+// language (EN/FR) and theme (black/CRT amber) without leaving the panel.
+void languageControlEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  markUserActivity();
+  setUiLanguage(uiLanguage == UI_LANG_FR ? UI_LANG_EN : UI_LANG_FR, true);
+}
+
+void themeControlEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  markUserActivity();
+  setUiTheme(uiTheme == UI_THEME_AMBER ? UI_THEME_BLACK : UI_THEME_AMBER, true);
+}
+
+lv_obj_t *createControlPillButton(int16_t x, lv_event_cb_t callback,
+                                  lv_obj_t **labelOut) {
+  lv_obj_t *button = lv_btn_create(controlPanel);
+  lv_obj_set_pos(button, x, 16);
+  lv_obj_set_size(button, 82, 44);
+  lv_obj_set_style_radius(button, 22, 0);
+  lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0A0A0A)), 0);
+  lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(button, 1, 0);
+  lv_obj_set_style_border_color(button, lv_color_hex(themeBorder(0x2A2A2A)), 0);
+  lv_obj_set_style_shadow_width(button, 0, 0);
+  lv_obj_set_style_bg_color(button, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
+                            LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *label = lv_label_create(button);
+  lv_obj_set_style_text_font(label, &lv_font_ui_18, 0);
+  lv_obj_set_style_text_color(label, themeText(), 0);
+  lv_obj_center(label);
+  *labelOut = label;
+  return button;
+}
+
+void updateControlPillLabels() {
+  if (languageControlLabel)
+    lv_label_set_text(languageControlLabel, uiLanguage == UI_LANG_FR ? "FR" : "EN");
+  if (themeControlLabel)
+    lv_label_set_text(themeControlLabel, themeIsAmber() ? "CRT" : "STD");
 }
 
 void createControlPanel() {
@@ -510,7 +576,7 @@ void createControlPanel() {
   lv_obj_remove_style_all(controlPanel);
   lv_obj_set_pos(controlPanel, 0, 0);
   lv_obj_set_size(controlPanel, CONTROL_PANEL_SIZE, CONTROL_PANEL_SIZE);
-  lv_obj_set_style_bg_color(controlPanel, lv_color_hex(0x101114), 0);
+  lv_obj_set_style_bg_color(controlPanel, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(controlPanel, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(controlPanel, 0, 0);
   lv_obj_set_style_pad_all(controlPanel, 0, 0);
@@ -519,17 +585,23 @@ void createControlPanel() {
   lv_obj_add_event_cb(controlPanel, mainUiGestureEvent, LV_EVENT_GESTURE, nullptr);
 
   batteryStatusIcon = createOfficialTablerIcon(
-    controlPanel, &tabler_battery, lv_color_white());
+    controlPanel, &tabler_battery, themeIcon());
   lv_obj_align(batteryStatusIcon, LV_ALIGN_TOP_LEFT, 24, 8);
 
   batteryStatusLabel = lv_label_create(controlPanel);
   lv_label_set_text(batteryStatusLabel, "--%");
   lv_obj_set_size(batteryStatusLabel, 92, 42);
-  lv_obj_set_style_text_font(batteryStatusLabel, &lv_font_montserrat_22, 0);
+  lv_obj_set_style_text_font(batteryStatusLabel, &lv_font_ui_22, 0);
   lv_obj_set_style_text_align(batteryStatusLabel, LV_TEXT_ALIGN_LEFT, 0);
-  lv_obj_set_style_bg_color(batteryStatusLabel, lv_color_hex(0x101114), 0);
+  lv_obj_set_style_bg_color(batteryStatusLabel, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(batteryStatusLabel, LV_OPA_COVER, 0);
   lv_obj_align(batteryStatusLabel, LV_ALIGN_TOP_LEFT, 86, 25);
+
+  languageControlButton = createControlPillButton(290, languageControlEvent,
+                                                  &languageControlLabel);
+  themeControlButton = createControlPillButton(382, themeControlEvent,
+                                               &themeControlLabel);
+  updateControlPillLabels();
 
   wifiControlButton = createControlButton(
     controlPanel, CONTROL_PANEL_WIFI_Y, &tabler_wifi,
@@ -538,9 +610,9 @@ void createControlPanel() {
   lv_label_set_text(wifiControlIp, "--");
   lv_obj_set_size(wifiControlIp, 185, 24);
   lv_label_set_long_mode(wifiControlIp, LV_LABEL_LONG_DOT);
-  lv_obj_set_style_text_font(wifiControlIp, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_font(wifiControlIp, &lv_font_ui_16, 0);
   lv_obj_set_style_text_align(wifiControlIp, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_bg_color(wifiControlIp, lv_color_hex(0x101114), 0);
+  lv_obj_set_style_bg_color(wifiControlIp, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(wifiControlIp, LV_OPA_COVER, 0);
   lv_obj_set_style_pad_all(wifiControlIp, 0, 0);
   lv_obj_align_to(wifiControlIp, wifiControlStatus, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
@@ -553,9 +625,9 @@ void createControlPanel() {
   lv_obj_set_size(brightnessSlider, CONTROL_PANEL_SLIDER_WIDTH, CONTROL_PANEL_SLIDER_HEIGHT);
   lv_slider_set_range(brightnessSlider, 0, 100);
   lv_slider_set_value(brightnessSlider, 25, LV_ANIM_OFF);
-  lv_obj_set_style_bg_color(brightnessSlider, lv_palette_main(LV_PALETTE_BLUE),
+  lv_obj_set_style_bg_color(brightnessSlider, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
                             LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(brightnessSlider, lv_palette_main(LV_PALETTE_BLUE),
+  lv_obj_set_style_bg_color(brightnessSlider, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
                             LV_PART_KNOB);
   lv_obj_clear_flag(brightnessSlider, LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_event_cb(brightnessSlider, brightnessControlEvent, LV_EVENT_ALL, nullptr);
@@ -565,23 +637,51 @@ void createControlPanel() {
   lv_obj_set_size(volumeSlider, CONTROL_PANEL_SLIDER_WIDTH, CONTROL_PANEL_SLIDER_HEIGHT);
   lv_slider_set_range(volumeSlider, 0, 100);
   lv_slider_set_value(volumeSlider, DEFAULT_AUDIO_VOLUME, LV_ANIM_OFF);
-  lv_obj_set_style_bg_color(volumeSlider, lv_palette_main(LV_PALETTE_BLUE),
+  lv_obj_set_style_bg_color(volumeSlider, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
                             LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(volumeSlider, lv_palette_main(LV_PALETTE_BLUE),
+  lv_obj_set_style_bg_color(volumeSlider, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
                             LV_PART_KNOB);
   lv_obj_clear_flag(volumeSlider, LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_event_cb(volumeSlider, volumeControlEvent, LV_EVENT_ALL, nullptr);
 
   lv_obj_t *volumeIcon = createOfficialTablerIcon(
-    controlPanel, &tabler_volume, lv_color_white());
+    controlPanel, &tabler_volume, themeIcon());
   lv_obj_align_to(volumeIcon, volumeSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
 
   lv_obj_t *brightnessIcon = createOfficialTablerIcon(
-    controlPanel, &tabler_sun, lv_color_white());
+    controlPanel, &tabler_sun, themeIcon());
   lv_obj_align_to(brightnessIcon, brightnessSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
 
   updateControlPanelStatus();
   lv_obj_add_flag(controlPanel, LV_OBJ_FLAG_HIDDEN);
+}
+
+// Re-apply the active theme to the pull-down control panel.
+void refreshControlPanelTheme() {
+  if (!controlPanel) return;
+  lv_obj_set_style_bg_color(controlPanel, themePageBackground(), 0);
+  const lv_color_t accent = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
+  for (lv_obj_t *slider : {brightnessSlider, volumeSlider}) {
+    if (!slider) continue;
+    lv_obj_set_style_bg_color(slider, accent, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider, accent, LV_PART_KNOB);
+  }
+  if (batteryStatusIcon) lv_obj_set_style_img_recolor(batteryStatusIcon, themeIcon(), 0);
+  if (batteryStatusLabel) lv_obj_set_style_bg_color(batteryStatusLabel, lv_color_black(), 0);
+  if (wifiControlStatus) lv_obj_set_style_bg_color(wifiControlStatus, lv_color_black(), 0);
+  if (wifiControlIp) lv_obj_set_style_bg_color(wifiControlIp, lv_color_black(), 0);
+  if (bluetoothControlStatus) lv_obj_set_style_bg_color(bluetoothControlStatus, lv_color_black(), 0);
+  for (lv_obj_t *button : {languageControlButton, themeControlButton}) {
+    if (!button) continue;
+    lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0A0A0A)), 0);
+    lv_obj_set_style_border_color(button, lv_color_hex(themeBorder(0x2A2A2A)), 0);
+    lv_obj_set_style_bg_color(button, accent, LV_PART_MAIN | LV_STATE_PRESSED);
+    if (lv_obj_get_child_cnt(button))
+      lv_obj_set_style_text_color(lv_obj_get_child(button, 0), themeText(), 0);
+  }
+  updateControlPillLabels();
+  // Force the wifi/lock/battery status colors to be recomputed for the theme.
+  updateControlPanelStatus();
 }
 
 void syncControlPanelSettings() {
@@ -602,7 +702,7 @@ void updateControlPanelStatus() {
   String wifiText;
   String wifiIpText = "--";
   if (!wifiUserEnabled) {
-    wifiText = "OFF";
+    wifiText = tr(STR_WIFI_OFF);
   } else if (WiFi.status() == WL_CONNECTED) {
     wifiText = WiFi.SSID();
     wifiIpText = WiFi.localIP().toString();
@@ -610,16 +710,29 @@ void updateControlPanelStatus() {
     wifiText = apSsid[0] ? apSsid : "AP";
     wifiIpText = WiFi.softAPIP().toString();
   } else {
-    wifiText = "CONNECTING";
+    wifiText = tr(STR_WIFI_CONNECTING);
   }
 
-  const char *bluetoothText = orientationLocked ? "LOCKED" : "AUTO";
+  const char *bluetoothText = orientationLocked ? tr(STR_ORIENT_LOCKED)
+                                                : tr(STR_ORIENT_AUTO);
 
   static String displayedWifiText;
   static String displayedWifiIpText;
   static String displayedBluetoothText;
   static int8_t displayedWifiEnabled = -1;
   static int8_t displayedOrientationLocked = -1;
+  static uint8_t displayedTheme = 0xFF;
+  static uint8_t displayedLanguage = 0xFF;
+  // A theme or language change must re-render colors and text even when the
+  // underlying wifi/orientation state has not changed.
+  if (displayedTheme != uiTheme || displayedLanguage != uiLanguage) {
+    displayedTheme = uiTheme;
+    displayedLanguage = uiLanguage;
+    displayedWifiEnabled = -1;
+    displayedOrientationLocked = -1;
+    displayedWifiText = "";
+    displayedBluetoothText = "";
+  }
   if (displayedWifiText != wifiText) {
     displayedWifiText = wifiText;
     lv_label_set_text(wifiControlStatus, displayedWifiText.c_str());
@@ -636,10 +749,10 @@ void updateControlPanelStatus() {
     changed = true;
   }
 
-  const lv_color_t activeColor = lv_palette_main(LV_PALETTE_BLUE);
-  const lv_color_t inactiveColor = lv_color_hex(0x555B65);
-  const lv_color_t activeTextColor = lv_palette_main(LV_PALETTE_BLUE);
-  const lv_color_t inactiveTextColor = lv_color_hex(0x9299A3);
+  const lv_color_t activeColor = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
+  const lv_color_t inactiveColor = lv_color_hex(themeSurface(0x141414));
+  const lv_color_t activeTextColor = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
+  const lv_color_t inactiveTextColor = themeTextDim(0x9299A3);
   if (displayedWifiEnabled != static_cast<int8_t>(wifiUserEnabled)) {
     displayedWifiEnabled = wifiUserEnabled;
     lv_obj_set_style_bg_color(wifiControlButton,
@@ -648,6 +761,13 @@ void updateControlPanelStatus() {
                                 wifiUserEnabled ? activeTextColor : inactiveTextColor, 0);
     lv_obj_set_style_text_color(wifiControlIp,
                                 wifiUserEnabled ? activeTextColor : inactiveTextColor, 0);
+    if (wifiControlIcon) {
+      // On the amber theme an active (amber-filled) key needs a dark glyph;
+      // an inactive black key needs an amber glyph. Otherwise keep white.
+      lv_obj_set_style_img_recolor(wifiControlIcon,
+        themeIsAmber() ? (wifiUserEnabled ? lv_color_black() : themeIcon())
+                       : lv_color_white(), 0);
+    }
     changed = true;
   }
   if (displayedOrientationLocked != static_cast<int8_t>(orientationLocked)) {
@@ -657,7 +777,11 @@ void updateControlPanelStatus() {
                                        ? activeTextColor : inactiveTextColor;
     lv_obj_set_style_bg_color(bluetoothControlButton, lockColor, LV_PART_MAIN);
     lv_obj_set_style_text_color(bluetoothControlStatus, lockTextColor, 0);
-    setTablerIconColor(bluetoothControlIcon, lv_color_white());
+    if (bluetoothControlIcon) {
+      lv_obj_set_style_img_recolor(bluetoothControlIcon,
+        themeIsAmber() ? (orientationLocked ? lv_color_black() : themeIcon())
+                       : lv_color_white(), 0);
+    }
     changed = true;
   }
   changed = updateBatteryPanelStatus() || changed;

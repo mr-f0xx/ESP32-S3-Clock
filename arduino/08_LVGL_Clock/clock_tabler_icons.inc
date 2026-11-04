@@ -23,7 +23,11 @@ enum TablerIconKind : uint8_t {
   TABLER_ICON_ALARM,
   TABLER_ICON_ALARM_OFF,
   TABLER_ICON_CHEVRON_LEFT,
-  TABLER_ICON_CHEVRON_RIGHT
+  TABLER_ICON_CHEVRON_RIGHT,
+  TABLER_ICON_AUDIOBOOK,
+  TABLER_ICON_ROTATE_LEFT,
+  TABLER_ICON_RADIO,
+  TABLER_ICON_STOP
 };
 
 void freeTablerLinePoints(lv_event_t *event) {
@@ -283,6 +287,46 @@ lv_obj_t *createTablerIcon(lv_obj_t *parent, TablerIconKind kind,
     case TABLER_ICON_CHEVRON_RIGHT: {
       const lv_point_t path[] = {{9, 6}, {15, 12}, {9, 18}};
       addTablerPath(layer, path, 3, size, color);
+      break;
+    }
+    case TABLER_ICON_AUDIOBOOK: {
+      // Open book projected from Tabler book.svg: two shallow page arcs top
+      // and bottom joined by three spines. Reads clearly as an audiobook.
+      const lv_point_t topArc[] = {{3, 6}, {7, 5}, {12, 6}, {17, 5}, {21, 6}};
+      const lv_point_t bottomArc[] = {{3, 19}, {7, 18}, {12, 19}, {17, 18}, {21, 19}};
+      addTablerPath(layer, topArc, 5, size, color);
+      addTablerPath(layer, bottomArc, 5, size, color);
+      addTablerSegment(layer, 3, 6, 3, 19, size, color);
+      addTablerSegment(layer, 12, 6, 12, 19, size, color);
+      addTablerSegment(layer, 21, 6, 21, 19, size, color);
+      break;
+    }
+    case TABLER_ICON_ROTATE_LEFT: {
+      // Counter-clockwise refresh arrow (Tabler rotate-left style) used for
+      // "restart from the beginning" and the -30 s rewind key.
+      const lv_point_t arc[] = {
+        {5, 9}, {7, 6}, {10, 4}, {14, 4}, {17, 6},
+        {19, 9}, {20, 12}, {19, 15}, {17, 18}, {14, 20},
+        {10, 20}, {7, 18}, {5, 15}
+      };
+      const lv_point_t arrow[] = {{5, 4}, {5, 9}, {10, 9}};
+      addTablerPath(layer, arc, 13, size, color);
+      addTablerPath(layer, arrow, 3, size, color);
+      break;
+    }
+    case TABLER_ICON_RADIO: {
+      // Classic transistor radio (Tabler radio style): diagonal antenna, a
+      // rounded body, a circular tuning dial and a short speaker grille.
+      addTablerSegment(layer, 17, 3, 9, 8, size, color);
+      addTablerOutline(layer, 3, 8, 18, 12, 2, size, color);
+      addTablerOutline(layer, 14, 12, 5, 5, LV_RADIUS_CIRCLE, size, color);
+      addTablerSegment(layer, 6, 12, 6, 16, size, color);
+      addTablerSegment(layer, 9, 12, 9, 16, size, color);
+      break;
+    }
+    case TABLER_ICON_STOP: {
+      // Filled-look stop square (outlined to match the 2 px icon convention).
+      addTablerOutline(layer, 6, 6, 12, 12, 2, size, color);
       break;
     }
   }

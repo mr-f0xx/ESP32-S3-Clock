@@ -98,7 +98,7 @@ void disableLowPowerKeyWakeup() {
 }
 
 enum class LowPowerRestoreApp : uint8_t {
-  Album, AppMenu, Calendar, Alarm, Music, Weather, WeatherInfo
+  Album, AppMenu, Calendar, Alarm, Music, Audiobook, Radio, Weather, WeatherInfo
 };
 
 LowPowerRestoreApp lowPowerRestoreApp = LowPowerRestoreApp::Album;
@@ -126,6 +126,8 @@ void captureLowPowerRestoreLocation() {
   lowPowerRestoreControlPanel = controlPanelVisible;
   if (weatherInfoPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::WeatherInfo;
   else if (weatherPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Weather;
+  else if (audiobookPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Audiobook;
+  else if (radioPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Radio;
   else if (musicPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Music;
   else if (alarmPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Alarm;
   else if (calendarPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Calendar;
@@ -137,6 +139,8 @@ void restoreLowPowerLocation() {
   controlPanelSuspendedWeather = false;
   controlPanelSuspendedMusic = false;
   controlPanelMusicWasPlaying = false;
+  controlPanelSuspendedAudiobook = false;
+  controlPanelAudiobookWasPlaying = false;
   switch (lowPowerRestoreApp) {
     case LowPowerRestoreApp::AppMenu:
       updateAppMenuPageVisibility();
@@ -145,6 +149,8 @@ void restoreLowPowerLocation() {
     case LowPowerRestoreApp::Calendar: showCalendarPage(false); break;
     case LowPowerRestoreApp::Alarm: showAlarmPage(false); break;
     case LowPowerRestoreApp::Music: showMusicPage(false); break;
+    case LowPowerRestoreApp::Audiobook: showAudiobookPage(false); break;
+    case LowPowerRestoreApp::Radio: showRadioPage(false); break;
     case LowPowerRestoreApp::Weather:
       if (videoPlayerModeActive()) showVideoPlayerPage(false);
       else showWeatherWallpaperPage(false);
@@ -220,6 +226,10 @@ void enterLowPowerClockMode() {
     return;
   }
   hideMusicPage(false, false);
+  hideAudiobookPage(false, false);
+  hideRadioPage(false, false);
+  suspendAudiobookForLowPower();
+  suspendRadioForLowPower();
   suspendMusicForLowPower(weatherSdIdle);
   suspendImageKeys();
   enableLowPowerKeyWakeup();
@@ -397,9 +407,8 @@ void exitLowPowerClockMode() {
                 digitalRead(IMAGE_NEXT_KEY_PIN) == HIGH ? 1U : 0U);
 
   lv_obj_t *screen = lv_scr_act();
-  lv_obj_set_style_bg_color(screen, lv_color_hex(0x070A10), 0);
-  lv_obj_set_style_bg_grad_color(screen, lv_color_hex(0x111A2C), 0);
-  lv_obj_set_style_bg_grad_dir(screen, LV_GRAD_DIR_VER, 0);
+  lv_obj_set_style_bg_color(screen, themePageBackground(), 0);
+  lv_obj_set_style_bg_grad_dir(screen, LV_GRAD_DIR_NONE, 0);
   if (shadeObject) lv_obj_add_flag(shadeObject, LV_OBJ_FLAG_HIDDEN);
   if (statusLabel) lv_obj_add_flag(statusLabel, LV_OBJ_FLAG_HIDDEN);
   if (addressLabel) lv_obj_add_flag(addressLabel, LV_OBJ_FLAG_HIDDEN);
@@ -414,7 +423,7 @@ void exitLowPowerClockMode() {
   if (timeBackground) {
     lv_obj_clear_flag(timeBackground, LV_OBJ_FLAG_HIDDEN);
   } else {
-    lv_obj_set_style_bg_color(timePanel, lv_color_hex(0x101C2A), 0);
+    lv_obj_set_style_bg_color(timePanel, themePageBackground(), 0);
     lv_obj_set_style_bg_opa(timePanel, LV_OPA_20, 0);
     lv_obj_set_style_radius(timePanel, TIME_PANEL_RADIUS, 0);
   }

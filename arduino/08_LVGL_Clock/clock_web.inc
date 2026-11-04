@@ -1,6 +1,9 @@
 // Wi-Fi portal, web API, uploads and preferences.
 // Included once by 08_LVGL_Clock.ino inside its private namespace.
 
+// Web replies follow the language chosen in the web page (sent as ?lang=).
+bool webResponseFrench() { return server.arg("lang") == "fr"; }
+
 void startConfigPortal() {
   if (!wifiUserEnabled) return;
   if (portalActive) {
@@ -161,8 +164,42 @@ void handleStatus() {
   json += weatherWallpaperFollowEnabled ? F("true") : F("false");
   json += F(",\"weather_minutes\":");
   json += String(weatherSwitchMinutes);
+  json += F(",\"lang\":");
+  json += String(uiLanguage);
+  json += F(",\"theme\":");
+  json += String(uiTheme);
   json += '}';
   server.send(200, "application/json; charset=utf-8", json);
+}
+
+// Appearance: device UI language (0=EN, 1=FR) and theme (0=AMOLED black,
+// 1=CRT amber). Applied through the same fade path as the on-device pills.
+void handleUiSettings() {
+  markUserActivity();
+  bool changed = false;
+  if (server.hasArg("lang")) {
+    const long lang = server.arg("lang").toInt();
+    if (lang < 0 || lang >= UI_LANG_COUNT) {
+      server.send(400, "text/plain; charset=utf-8", "Invalid language");
+      return;
+    }
+    if (static_cast<uint8_t>(lang) != uiLanguage) {
+      setUiLanguage(static_cast<uint8_t>(lang), true);
+      changed = true;
+    }
+  }
+  if (server.hasArg("theme")) {
+    const long theme = server.arg("theme").toInt();
+    if (theme < 0 || theme >= UI_THEME_COUNT) {
+      server.send(400, "text/plain; charset=utf-8", "Invalid theme");
+      return;
+    }
+    if (static_cast<uint8_t>(theme) != uiTheme) {
+      setUiTheme(static_cast<uint8_t>(theme), true);
+      changed = true;
+    }
+  }
+  server.send(200, "text/plain; charset=utf-8", changed ? "OK" : "NOCHANGE");
 }
 
 bool parseClockMinute(const String &value, uint16_t &minuteOfDay) {
@@ -188,7 +225,7 @@ void handleSleepSettings() {
       !parseClockMinute(server.arg("night_end"), endMinute) ||
       startMinute == endMinute || idleMinutes < MIN_IDLE_SLEEP_MINUTES ||
       idleMinutes > MAX_IDLE_SLEEP_MINUTES) {
-    server.send(400, "text/plain; charset=utf-8", "休眠时长或夜间时段无效");
+    server.send(400, "text/plain; charset=utf-8", webResponseFrench() ? "Durée de veille ou plage nocturne invalide" : "Invalid sleep duration or night period");
     return;
   }
   nightStartMinute = startMinute;
@@ -203,7 +240,9 @@ void handleSleepSettings() {
   preferences.putBool("sleep_clock", sleepTimeDisplayEnabled);
   markUserActivity();
   server.send(200, "text/plain; charset=utf-8",
-              idleSleepEnabled ? "无操作休眠设置已保存" : "无操作休眠已关闭");
+              idleSleepEnabled
+                  ? (webResponseFrench() ? "Réglages de veille enregistrés" : "Idle sleep settings saved")
+                  : (webResponseFrench() ? "Veille automatique désactivée" : "Idle sleep disabled"));
 }
 
 bool validCoordinate(const String &text, double minimum, double maximum) {
@@ -232,7 +271,7 @@ void handleWeatherSettings() {
       (haveManualCoordinates &&
        (!validCoordinate(latitude, -90.0, 90.0) ||
         !validCoordinate(longitude, -180.0, 180.0)))) {
-    server.send(400, "text/plain; charset=utf-8", "天气 API 参数无效");
+    server.send(400, "text/plain; charset=utf-8", webResponseFrench() ? "Paramètres API météo invalides" : "Invalid weather API parameters");
     return;
   }
   weatherApiHost = host;
@@ -246,7 +285,7 @@ void handleWeatherSettings() {
   preferences.putBool("weather_geo", weatherAutoLocationEnabled);
   refreshWeatherConfiguration();
   markUserActivity();
-  server.send(200, "text/plain; charset=utf-8", "天气配置已保存，正在刷新");
+  server.send(200, "text/plain; charset=utf-8", webResponseFrench() ? "Configuration météo enregistrée, actualisation en cours" : "Weather configuration saved, refreshing");
 }
 
 void handleBackgroundSwitchSettings() {
@@ -263,8 +302,8 @@ void handleBackgroundSwitchSettings() {
       weatherMinutes > MAX_BACKGROUND_SWITCH_MINUTES) {
     server.send(400, "text/plain; charset=utf-8",
                 albumLimit < imageCount
-                  ? "相册上限不能小于当前图片数；请先清空相册"
-                  : "自动切换间隔或相册上限无效");
+                  ? (webResponseFrench() ? "La limite de l'album ne peut être inférieure au nombre d'images actuel ; videz d'abord l'album" : "Album limit cannot be below the current image count; clear the album first")
+                  : (webResponseFrench() ? "Intervalle de changement auto ou limite d'album invalide" : "Invalid auto-switch interval or album limit"));
     return;
   }
   albumAutoSwitchEnabled = server.arg("album_auto") == "1";
@@ -285,7 +324,7 @@ void handleBackgroundSwitchSettings() {
   preferences.putUShort("weather_mins", weatherSwitchMinutes);
   WeatherWallpaper::applyWallpaperFollowSetting();
   markUserActivity();
-  server.send(200, "text/plain; charset=utf-8", "背景自动切换设置已保存");
+  server.send(200, "text/plain; charset=utf-8", webResponseFrench() ? "Réglages de changement automatique du fond enregistrés" : "Background auto-switch settings saved");
 }
 
 void handleSave() {
@@ -294,7 +333,7 @@ void handleSave() {
   const String password = server.arg("password");
   const String tz = server.arg("tz");
   if (ssid.isEmpty() || ssid.length() > 32 || password.length() > 64 || tz.isEmpty() || tz.length() > 63) {
-    server.send(400, "text/plain; charset=utf-8", "参数无效");
+    server.send(400, "text/plain; charset=utf-8", webResponseFrench() ? "Paramètres invalides" : "Invalid parameters");
     return;
   }
 
@@ -302,7 +341,9 @@ void handleSave() {
   preferences.putString("pass", password);
   preferences.putString("tz", tz);
   server.send(200, "text/html; charset=utf-8",
-              "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'><h2>设置已保存</h2><p>设备正在重启并连接 Wi-Fi。</p>");
+              webResponseFrench()
+              ? "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'><h2>Paramètres enregistrés</h2><p>L'appareil redémarre et se connecte au Wi-Fi.</p>"
+              : "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'><h2>Settings saved</h2><p>The device is restarting and connecting to Wi-Fi.</p>");
   rebootAt = millis() + 1200;
 }
 
@@ -310,26 +351,30 @@ bool commitUploadedImage() {
   return commitUploadedImageToHistory();
 }
 
+// Captured when the upload starts so the reply matches the page language.
+static bool uploadResponseFrench = false;
+
 void handleImageUpload() {
   HTTPUpload &upload = server.upload();
   if (upload.status == UPLOAD_FILE_START) {
     markUserActivity();
+    uploadResponseFrench = webResponseFrench();
     uploadSucceeded = false;
     uploadError = String();
     uploadBytes = 0;
     LittleFS.remove(IMAGE_TEMP_PATH);
     uploadFile = LittleFS.open(IMAGE_TEMP_PATH, FILE_WRITE);
-    if (!uploadFile) uploadError = "无法创建临时文件";
+    if (!uploadFile) uploadError = uploadResponseFrench ? "Impossible de créer le fichier temporaire" : "Cannot create temporary file";
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (uploadFile && uploadError.isEmpty()) {
       const size_t written = uploadFile.write(upload.buf, upload.currentSize);
       uploadBytes += written;
-      if (written != upload.currentSize || uploadBytes > IMAGE_BYTES) uploadError = "写入图片失败";
+      if (written != upload.currentSize || uploadBytes > IMAGE_BYTES) uploadError = uploadResponseFrench ? "Échec de l'écriture de l'image" : "Failed to write image";
     }
   } else if (upload.status == UPLOAD_FILE_END) {
     if (uploadFile) uploadFile.close();
     if (uploadError.isEmpty() && uploadBytes != IMAGE_BYTES) {
-      uploadError = "图片尺寸不正确，必须为 480x480 RGB565";
+      uploadError = uploadResponseFrench ? "Taille d'image incorrecte ; elle doit être de 480x480 en RGB565" : "Incorrect image size; must be 480x480 RGB565";
     }
     if (uploadError.isEmpty()) {
       uploadSucceeded = commitUploadedImage();
@@ -339,7 +384,7 @@ void handleImageUpload() {
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
     if (uploadFile) uploadFile.close();
     LittleFS.remove(IMAGE_TEMP_PATH);
-    uploadError = "上传已中止";
+    uploadError = uploadResponseFrench ? "Téléversement annulé" : "Upload aborted";
   }
 }
 
@@ -347,27 +392,27 @@ void finishImageUpload() {
   if (uploadSucceeded) {
     server.send(200, "text/plain; charset=utf-8", "OK");
   } else {
-    server.send(400, "text/plain; charset=utf-8", uploadError.isEmpty() ? "上传失败" : uploadError);
+    server.send(400, "text/plain; charset=utf-8", uploadError.isEmpty() ? (uploadResponseFrench ? "Échec du téléversement" : "Upload failed") : uploadError);
   }
 }
 
 void handleClearImage() {
   markUserActivity();
   imageClearRequested = true;
-  server.send(200, "text/plain; charset=utf-8", "相册清空请求已提交");
+  server.send(200, "text/plain; charset=utf-8", webResponseFrench() ? "Demande de vidage de l'album envoyée" : "Album clear request submitted");
 }
 
 void handleClockFont() {
   markUserActivity();
   const String value = server.arg("font");
   if (value.length() != 1 || value[0] < '0' || value[0] >= '0' + CLOCK_FONT_COUNT) {
-    server.send(400, "text/plain; charset=utf-8", "字体参数无效");
+    server.send(400, "text/plain; charset=utf-8", webResponseFrench() ? "Paramètres de police invalides" : "Invalid font parameters");
     return;
   }
 
   pendingClockFontIndex = static_cast<uint8_t>(value[0] - '0');
   clockFontChangeRequested = true;
-  server.send(200, "text/plain; charset=utf-8", "字体已保存");
+  server.send(200, "text/plain; charset=utf-8", webResponseFrench() ? "Police enregistrée" : "Font saved");
 }
 
 void startWebServer() {
@@ -382,6 +427,7 @@ void startWebServer() {
   server.on("/sleep-settings", HTTP_POST, handleSleepSettings);
   server.on("/weather-settings", HTTP_POST, handleWeatherSettings);
   server.on("/background-switch", HTTP_POST, handleBackgroundSwitchSettings);
+  server.on("/ui-settings", HTTP_POST, handleUiSettings);
   server.on("/generate_204", HTTP_ANY, redirectToPortal);
   server.on("/hotspot-detect.html", HTTP_ANY, redirectToPortal);
   server.on("/fwlink", HTTP_ANY, redirectToPortal);
@@ -396,6 +442,10 @@ void startWebServer() {
 
 void loadSettings() {
   preferences.begin("clock", false);
+  uiLanguage = min<uint8_t>(preferences.getUChar("ui_lang", UI_LANG_EN),
+                            UI_LANG_COUNT - 1);
+  uiTheme = min<uint8_t>(preferences.getUChar("ui_theme", UI_THEME_BLACK),
+                         UI_THEME_COUNT - 1);
   savedSsid = preferences.getString("ssid", "");
   savedPassword = preferences.getString("pass", "");
   timezoneRule = preferences.getString("tz", "CST-8");
@@ -440,6 +490,8 @@ void loadSettings() {
   musicPlaybackMode = min<uint8_t>(
     preferences.getUChar("music_mode", MUSIC_MODE_REPEAT_ALL),
     MUSIC_MODE_COUNT - 1);
+  radioStationIndex = min<uint8_t>(preferences.getUChar("radio_station", 0),
+                                   RADIO_STATION_COUNT - 1);
   for (uint8_t i = 0; i < 3; ++i) {
     char key[8];
     snprintf(key, sizeof(key), "a%u_h", i);
@@ -456,4 +508,7 @@ void loadSettings() {
   syncControlPanelSettings();
   syncAlarmUi();
   updateMusicPlaybackModeIcon();
+  // Apply the persisted language + theme to every page. Idempotent, so this is
+  // also safe on wake (exitLowPowerClockMode calls loadSettings again).
+  applyUiAppearance();
 }

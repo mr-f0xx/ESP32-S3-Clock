@@ -1,0 +1,280 @@
+// UI internationalization (English / French).
+// Included once by 08_LVGL_Clock.ino inside its private namespace, before the
+// UI modules so tr() and the label registry are available everywhere.
+//
+// Static labels register themselves with i18nRegister() at creation time and
+// are re-translated by applyUiLanguage(). Fully dynamic labels (status lines,
+// weather values, battery, ...) are re-rendered by their page refresh function
+// instead, so a language switch never overwrites live data with a stale
+// placeholder.
+
+enum UiLanguage : uint8_t { UI_LANG_EN = 0, UI_LANG_FR = 1, UI_LANG_COUNT };
+
+enum UiStr : uint16_t {
+  STR_WAITING_NTP = 0,
+  STR_WIFI_NOT_CONFIGURED,
+  STR_STARTING_SERVICES,
+  STR_CONFIG_MODE,
+  STR_CONNECTING,
+  STR_AP_OPEN_NETWORK,
+  STR_PHONE_UI,
+  STR_TAP_SETTINGS_SETUP,
+  STR_OPEN_NETWORK_NO_PASS,
+  STR_WIFI_SETUP,
+  STR_SETUP_STEP1,
+  STR_SETUP_STEP2,
+  STR_SETUP_NOTE,
+  STR_CHOOSE_CLOCK_MODE,
+  STR_NO_BAT,
+  STR_WIFI_OFF,
+  STR_WIFI_CONNECTING,
+  STR_ORIENT_LOCKED,
+  STR_ORIENT_AUTO,
+  STR_ALARM_ON,
+  STR_ALARM_OFF,
+  STR_NO_MUSIC_FOUND,
+  STR_MP3_WAV,
+  STR_SD_UNAVAILABLE,
+  STR_SD_BUSY,
+  STR_CANNOT_OPEN_MUSIC_FOLDER,
+  STR_READY,
+  STR_NO_MP3_WAV_SD,
+  STR_CODEC_UNAVAILABLE,
+  STR_CODEC_INIT_FAILED,
+  STR_AUDIO_WAKE_FAILED,
+  STR_I2S_SETUP_FAILED,
+  STR_CANNOT_OPEN_TRACK,
+  STR_UNSUPPORTED_AUDIO,
+  STR_PLAYING,
+  STR_REPEAT_ONE,
+  STR_SHUFFLE,
+  STR_REPEAT_ALL,
+  STR_FINISHED,
+  STR_PAUSED_BY_CONTROLS,
+  STR_PAUSED,
+  STR_INSERT_SD,
+  STR_PLAYLIST,
+  STR_FEELS_DASH,
+  STR_HUMIDITY_DASH,
+  STR_WIND_DASH,
+  STR_AQI_DASH,
+  STR_FEELS_FMT,
+  STR_HUMIDITY_FMT,
+  STR_WIND_FMT,
+  STR_AQI_FMT,
+  STR_UNKNOWN,
+  STR_UNKNOWN_LOCATION,
+  STR_WAITING_UPDATE,
+  STR_UPDATED_FMT,
+  STR_FORECAST_3DAY,
+  STR_TEMP_24H,
+  STR_WAITING_FORECAST,
+  STR_FORECAST_UNAVAILABLE,
+  STR_PRECIP_2H,
+  STR_MINUTE_FORECAST_UNAVAILABLE,
+  STR_TWO_HOUR_FORECAST,
+  STR_VIDEO,
+  STR_WALLPAPER_BUF_FAILED,
+  STR_JPEG_INIT_FAILED,
+  STR_WALLPAPER_QUEUE_FAILED,
+  STR_WALLPAPER_TASK_FAILED,
+  // Audiobooks
+  STR_AUDIOBOOKS,
+  STR_NO_AUDIOBOOKS,
+  STR_AUDIOBOOK_FOLDER_HINT,
+  STR_CANNOT_OPEN_BOOK_FOLDER,
+  STR_NO_AUDIOBOOKS_SD,
+  STR_BOOKLIST,
+  STR_RESUMED,
+  STR_SEEK_BACK,
+  STR_SEEK_FORWARD,
+  STR_RESTART_BOOK,
+  STR_BOOK_COUNT_FMT,
+  // Internet radio
+  STR_RADIO,
+  STR_RADIO_STATIONS,
+  STR_RADIO_NOW_PLAYING,
+  STR_RADIO_CHOOSE_STATION,
+  STR_RADIO_CONNECTING,
+  STR_RADIO_BUFFERING,
+  STR_RADIO_STOPPED,
+  STR_RADIO_STOP,
+  STR_RADIO_NO_WIFI,
+  STR_RADIO_STREAM_ERROR,
+  STR_RADIO_RECONNECTING,
+  STR_RADIO_WAITING_TITLE,
+  STR_RADIO_NO_TITLE,
+  STR_LANGUAGE,
+  STR_THEME,
+  STR_THEME_BLACK,
+  STR_THEME_AMBER,
+  STR_COUNT
+};
+
+// Indexed [UiStr][UiLanguage]. French strings use UTF-8; the accent fallback
+// fonts attached to every UI font size render the non-ASCII glyphs.
+static const char *const UI_TEXT[STR_COUNT][UI_LANG_COUNT] = {
+  /* STR_WAITING_NTP */ {"WAITING FOR NTP", "EN ATTENTE NTP"},
+  /* STR_WIFI_NOT_CONFIGURED */ {"Wi-Fi not configured", "Wi-Fi non configuré"},
+  /* STR_STARTING_SERVICES */ {"Starting services...", "Démarrage des services..."},
+  /* STR_CONFIG_MODE */ {"Configuration mode", "Mode configuration"},
+  /* STR_CONNECTING */ {"Connecting...", "Connexion..."},
+  /* STR_AP_OPEN_NETWORK */ {"AP: %s  OPEN NETWORK\nOpen 192.168.4.1",
+                             "AP : %s  RÉSEAU OUVERT\nOuvrir 192.168.4.1"},
+  /* STR_PHONE_UI */ {"Phone UI: http://%s", "Interface : http://%s"},
+  /* STR_TAP_SETTINGS_SETUP */ {"Tap the settings button to start phone setup",
+                                "Touchez Réglages pour configurer le téléphone"},
+  /* STR_OPEN_NETWORK_NO_PASS */ {"Open network - no password",
+                                  "Réseau ouvert - sans mot de passe"},
+  /* STR_WIFI_SETUP */ {"Wi-Fi Setup", "Configuration Wi-Fi"},
+  /* STR_SETUP_STEP1 */ {"1. Connect your phone to this Wi-Fi",
+                         "1. Connectez le téléphone à ce Wi-Fi"},
+  /* STR_SETUP_STEP2 */ {"2. Open this address in your browser",
+                         "2. Ouvrez cette adresse dans le navigateur"},
+  /* STR_SETUP_NOTE */ {"Use the same configuration page as the Wi-Fi web UI.",
+                        "Même page de configuration que l'interface web Wi-Fi."},
+  /* STR_CHOOSE_CLOCK_MODE */ {"Choose Clock Mode", "Mode d'horloge"},
+  /* STR_NO_BAT */ {"NO BAT", "SANS BAT"},
+  /* STR_WIFI_OFF */ {"OFF", "OFF"},
+  /* STR_WIFI_CONNECTING */ {"CONNECTING", "CONNEXION"},
+  /* STR_ORIENT_LOCKED */ {"LOCKED", "VERROU"},
+  /* STR_ORIENT_AUTO */ {"AUTO", "AUTO"},
+  /* STR_ALARM_ON */ {"ON", "ON"},
+  /* STR_ALARM_OFF */ {"OFF", "OFF"},
+  /* STR_NO_MUSIC_FOUND */ {"No music found", "Aucune musique"},
+  /* STR_MP3_WAV */ {"MP3 / WAV", "MP3 / WAV"},
+  /* STR_SD_UNAVAILABLE */ {"SD card unavailable", "Carte SD indisponible"},
+  /* STR_SD_BUSY */ {"SD card is still busy", "Carte SD occupée"},
+  /* STR_CANNOT_OPEN_MUSIC_FOLDER */ {"Cannot open music folder",
+                                      "Dossier musique inaccessible"},
+  /* STR_READY */ {"Ready", "Prêt"},
+  /* STR_NO_MP3_WAV_SD */ {"No MP3/WAV on SD", "Aucun MP3/WAV sur la SD"},
+  /* STR_CODEC_UNAVAILABLE */ {"Audio codec unavailable", "Codec audio indisponible"},
+  /* STR_CODEC_INIT_FAILED */ {"Audio codec init failed", "Échec init codec audio"},
+  /* STR_AUDIO_WAKE_FAILED */ {"Audio wake failed", "Échec réveil audio"},
+  /* STR_I2S_SETUP_FAILED */ {"I2S setup failed", "Échec configuration I2S"},
+  /* STR_CANNOT_OPEN_TRACK */ {"Cannot open track", "Piste illisible"},
+  /* STR_UNSUPPORTED_AUDIO */ {"Unsupported audio file", "Fichier audio non supporté"},
+  /* STR_PLAYING */ {"Playing", "Lecture"},
+  /* STR_REPEAT_ONE */ {"Repeat one", "Répéter un"},
+  /* STR_SHUFFLE */ {"Shuffle", "Aléatoire"},
+  /* STR_REPEAT_ALL */ {"Repeat all", "Répéter tout"},
+  /* STR_FINISHED */ {"Finished", "Terminé"},
+  /* STR_PAUSED_BY_CONTROLS */ {"Paused by Controls", "Pause (commandes)"},
+  /* STR_PAUSED */ {"Paused", "En pause"},
+  /* STR_INSERT_SD */ {"Insert SD card", "Insérer la carte SD"},
+  /* STR_PLAYLIST */ {"PLAYLIST", "LISTE DE LECTURE"},
+  /* STR_FEELS_DASH */ {"Feels --", "Ressenti --"},
+  /* STR_HUMIDITY_DASH */ {"Humidity --", "Humidité --"},
+  /* STR_WIND_DASH */ {"Wind --", "Vent --"},
+  /* STR_AQI_DASH */ {"AQI --", "AQI --"},
+  /* STR_FEELS_FMT */ {"Feels %d\xC2\xB0", "Ressenti %d\xC2\xB0"},
+  /* STR_HUMIDITY_FMT */ {"Humidity %u%%", "Humidité %u%%"},
+  /* STR_WIND_FMT */ {"Wind %s", "Vent %s"},
+  /* STR_AQI_FMT */ {"AQI %u", "AQI %u"},
+  /* STR_UNKNOWN */ {"Unknown", "Inconnu"},
+  /* STR_UNKNOWN_LOCATION */ {"Unknown location", "Lieu inconnu"},
+  /* STR_WAITING_UPDATE */ {"Waiting for update", "En attente de mise à jour"},
+  /* STR_UPDATED_FMT */ {"%lum ago", "il y a %lu min"},
+  /* STR_FORECAST_3DAY */ {"3-DAY FORECAST", "PRÉVISIONS 3 JOURS"},
+  /* STR_TEMP_24H */ {"TEMPERATURE \xE2\x80\xA2 24H", "TEMPÉRATURE \xE2\x80\xA2 24H"},
+  /* STR_WAITING_FORECAST */ {"Waiting for forecast", "En attente des prévisions"},
+  /* STR_FORECAST_UNAVAILABLE */ {"Forecast unavailable", "Prévisions indisponibles"},
+  /* STR_PRECIP_2H */ {"PRECIPITATION \xE2\x80\xA2 2H", "PRÉCIPITATIONS \xE2\x80\xA2 2H"},
+  /* STR_MINUTE_FORECAST_UNAVAILABLE */ {"Minute forecast unavailable",
+                                         "Prévision minute indisponible"},
+  /* STR_TWO_HOUR_FORECAST */ {"Two-hour forecast", "Prévision à deux heures"},
+  /* STR_VIDEO */ {"Video", "Vidéo"},
+  /* STR_WALLPAPER_BUF_FAILED */ {"Wallpaper buffer allocation failed",
+                                  "Échec allocation tampon fond"},
+  /* STR_JPEG_INIT_FAILED */ {"JPEG decoder initialization failed",
+                              "Échec init décodeur JPEG"},
+  /* STR_WALLPAPER_QUEUE_FAILED */ {"Wallpaper queue allocation failed",
+                                    "Échec allocation file fond"},
+  /* STR_WALLPAPER_TASK_FAILED */ {"Wallpaper task startup failed",
+                                   "Échec démarrage tâche fond"},
+  /* STR_AUDIOBOOKS */ {"Audiobooks", "Livres audio"},
+  /* STR_NO_AUDIOBOOKS */ {"No audiobooks found", "Aucun livre audio"},
+  /* STR_AUDIOBOOK_FOLDER_HINT */ {"Put MP3/WAV in /audiobooks",
+                                   "Placez MP3/WAV dans /audiobooks"},
+  /* STR_CANNOT_OPEN_BOOK_FOLDER */ {"Cannot open audiobooks folder",
+                                     "Dossier livres audio inaccessible"},
+  /* STR_NO_AUDIOBOOKS_SD */ {"No audiobooks on SD", "Aucun livre audio sur la SD"},
+  /* STR_BOOKLIST */ {"BOOKS", "LIVRES"},
+  /* STR_RESUMED */ {"Resumed", "Repris"},
+  /* STR_SEEK_BACK */ {"-30s", "-30s"},
+  /* STR_SEEK_FORWARD */ {"+30s", "+30s"},
+  /* STR_RESTART_BOOK */ {"Restart", "Reprendre"},
+  /* STR_BOOK_COUNT_FMT */ {"%u / %u", "%u / %u"},
+  /* STR_RADIO */ {"Internet Radio", "Radio internet"},
+  /* STR_RADIO_STATIONS */ {"STATIONS", "STATIONS"},
+  /* STR_RADIO_NOW_PLAYING */ {"NOW PLAYING", "EN COURS"},
+  /* STR_RADIO_CHOOSE_STATION */ {"Choose a station", "Choisissez une station"},
+  /* STR_RADIO_CONNECTING */ {"Connecting...", "Connexion..."},
+  /* STR_RADIO_BUFFERING */ {"Buffering...", "Mise en tampon..."},
+  /* STR_RADIO_STOPPED */ {"Stopped", "Arrêté"},
+  /* STR_RADIO_STOP */ {"Stop", "Arrêt"},
+  /* STR_RADIO_NO_WIFI */ {"Connect to Wi-Fi first", "Connectez le Wi-Fi d'abord"},
+  /* STR_RADIO_STREAM_ERROR */ {"Stream unavailable", "Flux indisponible"},
+  /* STR_RADIO_RECONNECTING */ {"Reconnecting...", "Reconnexion..."},
+  /* STR_RADIO_WAITING_TITLE */ {"Waiting for track...", "En attente du titre..."},
+  /* STR_RADIO_NO_TITLE */ {"Station sends no title", "Aucun titre envoyé"},
+  /* STR_LANGUAGE */ {"Language", "Langue"},
+  /* STR_THEME */ {"Theme", "Thème"},
+  /* STR_THEME_BLACK */ {"AMOLED Black", "Noir AMOLED"},
+  /* STR_THEME_AMBER */ {"CRT Amber", "Ambre CRT"},
+};
+
+inline const char *tr(UiStr id) {
+  if (id >= STR_COUNT) return "";
+  return UI_TEXT[id][uiLanguage < UI_LANG_COUNT ? uiLanguage : UI_LANG_EN];
+}
+
+// ---- Static label registry -------------------------------------------------
+constexpr uint8_t I18N_LABEL_CAPACITY = 48;
+struct I18nLabel {
+  lv_obj_t *object;
+  UiStr id;
+};
+static I18nLabel i18nLabels[I18N_LABEL_CAPACITY];
+static uint8_t i18nLabelCount = 0;
+
+void i18nRegister(lv_obj_t *label, UiStr id) {
+  if (!label || i18nLabelCount >= I18N_LABEL_CAPACITY) return;
+  i18nLabels[i18nLabelCount].object = label;
+  i18nLabels[i18nLabelCount].id = id;
+  ++i18nLabelCount;
+  lv_label_set_text(label, tr(id));
+}
+
+// Re-apply every registered static label. Dynamic content is refreshed by the
+// caller (applyUiAppearance) through the per-page update functions.
+void applyUiLanguageStatic() {
+  for (uint8_t i = 0; i < i18nLabelCount; ++i) {
+    if (i18nLabels[i].object)
+      lv_label_set_text(i18nLabels[i].object, tr(i18nLabels[i].id));
+  }
+}
+
+// ---- Calendar localization -------------------------------------------------
+static const char *const CALENDAR_MONTHS[UI_LANG_COUNT][12] = {
+  {"January", "February", "March", "April", "May", "June", "July", "August",
+   "September", "October", "November", "December"},
+  {"Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août",
+   "Septembre", "Octobre", "Novembre", "Décembre"},
+};
+// LVGL's calendar week starts on Monday.
+static const char *const CALENDAR_DAYS[UI_LANG_COUNT][7] = {
+  {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"},
+  {"Lu", "Ma", "Me", "Je", "Ve", "Sa", "Di"},
+};
+
+const char *calendarMonthName(uint8_t monthIndex) {
+  return CALENDAR_MONTHS[uiLanguage < UI_LANG_COUNT ? uiLanguage : UI_LANG_EN]
+                        [monthIndex % 12];
+}
+
+// QWeather API language parameter matching the selected UI language.
+inline const char *weatherApiLang() {
+  return uiLanguage == UI_LANG_FR ? "fr" : "en";
+}
