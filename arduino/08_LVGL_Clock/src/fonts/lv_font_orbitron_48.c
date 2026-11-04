@@ -4,11 +4,7 @@
  * Opts: --bpp 4 --size 48 --font /home/user/.cache/fontgen/ttf/Orbitron-Bold.ttf --range 0x30-0x3A,0x2D --format lvgl --no-compress --lv-font-name lv_font_orbitron_48 -o arduino/08_LVGL_Clock/src/fonts/lv_font_orbitron_48.c
  ******************************************************************************/
 
-#ifdef LV_LVGL_H_INCLUDE_SIMPLE
-#include "lvgl.h"
-#else
-#include "lvgl/lvgl.h"
-#endif
+#include <lvgl.h>
 
 #ifndef LV_FONT_ORBITRON_48
 #define LV_FONT_ORBITRON_48 1
