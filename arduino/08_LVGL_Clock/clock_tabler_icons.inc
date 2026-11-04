@@ -28,6 +28,8 @@ enum TablerIconKind : uint8_t {
   TABLER_ICON_ROTATE_LEFT,
   TABLER_ICON_RADIO,
   TABLER_ICON_POWER,
+  TABLER_ICON_WORLD,
+  TABLER_ICON_TIMER,
   TABLER_ICON_STOP
 };
 
@@ -334,6 +336,22 @@ lv_obj_t *createTablerIcon(lv_obj_t *parent, TablerIconKind kind,
       };
       addTablerPath(layer, arc, 12, size, color);
       addTablerSegment(layer, 12, 4, 12, 12, size, color);
+      break;
+    }
+    case TABLER_ICON_WORLD: {
+      // Globe: outer circle, equator and a central meridian ellipse.
+      addTablerOutline(layer, 3, 3, 18, 18, LV_RADIUS_CIRCLE, size, color);
+      addTablerSegment(layer, 3, 12, 21, 12, size, color);
+      addTablerOutline(layer, 8, 3, 8, 18, 4, size, color);
+      break;
+    }
+    case TABLER_ICON_TIMER: {
+      // Stopwatch: round body, top crown and a hand.
+      addTablerOutline(layer, 5, 7, 14, 14, LV_RADIUS_CIRCLE, size, color);
+      addTablerSegment(layer, 10, 3, 14, 3, size, color);
+      addTablerSegment(layer, 12, 3, 12, 7, size, color);
+      addTablerSegment(layer, 12, 14, 12, 10, size, color);
+      addTablerSegment(layer, 12, 14, 15, 14, size, color);
       break;
     }
     case TABLER_ICON_STOP: {

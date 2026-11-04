@@ -29,7 +29,7 @@ uint32_t powerOffChoiceSuppressedUntil = 0;
 // Track the launcher tiles so a theme change can recolor every key without
 // rebuilding the menu. The base color is the per-app accent used in the black
 // theme; the amber theme turns each tile into a black, amber-outlined key.
-constexpr uint8_t APP_MENU_TILE_CAPACITY = 10;
+constexpr uint8_t APP_MENU_TILE_CAPACITY = 13;
 lv_obj_t *appMenuTileButtons[APP_MENU_TILE_CAPACITY] = {};
 uint32_t appMenuTileColors[APP_MENU_TILE_CAPACITY] = {};
 uint8_t appMenuTileCount = 0;
@@ -44,7 +44,10 @@ enum AppMenuItem : uint8_t {
   APP_MENU_WEATHER,
   APP_MENU_AUDIOBOOK,
   APP_MENU_RADIO,
-  APP_MENU_POWER
+  APP_MENU_POWER,
+  APP_MENU_WORLD_CLOCK,
+  APP_MENU_PHOTO_FRAME,
+  APP_MENU_TIMER
 };
 
 void cancelPendingAppLaunches() {
@@ -145,7 +148,7 @@ void appMenuGestureEvent(lv_event_t *event) {
 }
 
 void updateAppMenuPageVisibility() {
-  for (uint8_t i = 0; i < 3; ++i) {
+  for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
     if (appMenuPages[i]) {
       if (i == appMenuPageIndex) lv_obj_clear_flag(appMenuPages[i], LV_OBJ_FLAG_HIDDEN);
       else lv_obj_add_flag(appMenuPages[i], LV_OBJ_FLAG_HIDDEN);
@@ -155,7 +158,8 @@ void updateAppMenuPageVisibility() {
                       i == appMenuPageIndex ? 9 : 6);
       lv_obj_set_style_bg_opa(appMenuPageDots[i],
                               i == appMenuPageIndex ? LV_OPA_COVER : LV_OPA_30, 0);
-      lv_obj_align(appMenuPageDots[i], LV_ALIGN_BOTTOM_MID, (i - 1) * 18, -13);
+      lv_obj_align(appMenuPageDots[i], LV_ALIGN_BOTTOM_MID,
+                   (static_cast<int16_t>(i) * 2 - (APP_MENU_PAGE_COUNT - 1)) * 9, -13);
     }
   }
 }
@@ -210,7 +214,8 @@ void showAppMenu(bool fade) {
       musicPageVisible || musicPageShowRequested || audiobookPageVisible ||
       audiobookPageShowRequested || weatherPageVisible ||
       weatherPageShowRequested || weatherInfoPageVisible ||
-      weatherInfoPageShowRequested) return;
+      weatherInfoPageShowRequested || worldClockPageVisible ||
+      photoFramePageVisible || timerPageVisible) return;
   if (fade) {
     appMenuHideRequested = false;
     appMenuShowRequested = true;
@@ -308,7 +313,7 @@ void processCalendarPageActions() {
 
 void handleGlobalNavigationStep(int8_t direction) {
   if (!direction || lowPowerMode || controlPanelVisible || controlPanelShowRequested ||
-      appMenuVisible || appMenuShowRequested) return;
+      appMenuVisible || appMenuShowRequested || timerAlertVisible) return;
   markUserActivity();
   if (calendarPageVisible) {
     requestCalendarMonthStep(direction);
@@ -320,6 +325,12 @@ void handleGlobalNavigationStep(int8_t direction) {
     selectAdjacentAudiobook(direction);
   } else if (radioPageVisible) {
     selectAdjacentRadioStation(direction);
+  } else if (worldClockPageVisible) {
+    selectAdjacentWorldCity(direction);
+  } else if (photoFramePageVisible) {
+    selectAdjacentPhoto(direction);
+  } else if (timerPageVisible) {
+    adjustTimerMinutes(direction);
   } else if (weatherPageVisible) {
     // Physical +/- and weather swipes share the same ordered scene playlist.
     selectAdjacentWeatherWallpaper(direction);
@@ -380,7 +391,7 @@ void processAppMenuTransition() {
     const int8_t step = appMenuPageStepRequested;
     appMenuPageStepRequested = 0;
     const uint8_t nextPage = constrain(
-      static_cast<int16_t>(appMenuPageIndex) + step, 0, 2);
+      static_cast<int16_t>(appMenuPageIndex) + step, 0, APP_MENU_PAGE_COUNT - 1);
     if (nextPage != appMenuPageIndex) {
       beginScreenFade(activeBrightness);
       appMenuPageIndex = nextPage;
@@ -432,7 +443,7 @@ void appMenuItemEvent(lv_event_t *event) {
       static_cast<int32_t>(now - appMenuClickSuppressedUntil) < 0) return;
   const AppMenuItem item = static_cast<AppMenuItem>(
     reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
-  if (item > APP_MENU_POWER) return;
+  if (item > APP_MENU_TIMER) return;
   // Guard every normal click too, not only a preceding swipe. CST9217 can
   // occasionally report another press after release, especially near a
   // rotation; without this lock the second sample could launch another tile.
@@ -464,6 +475,12 @@ void appMenuItemEvent(lv_event_t *event) {
     showRadioPage(true);
   } else if (item == APP_MENU_POWER) {
     showPowerOffSelector();
+  } else if (item == APP_MENU_WORLD_CLOCK) {
+    showWorldClockPage(true);
+  } else if (item == APP_MENU_PHOTO_FRAME) {
+    showPhotoFramePage(true);
+  } else if (item == APP_MENU_TIMER) {
+    showTimerPage(true);
   } else {
     // The Settings tile exposes the same configuration page served over the
     // normal Wi-Fi connection, but through a predictable local hotspot.
@@ -583,6 +600,7 @@ void appPageGestureEvent(lv_event_t *event) {
   lv_indev_t *input = lv_indev_get_act();
   if (!input || controlPanelVisible || controlPanelShowRequested) return;
   markUserActivity();
+  if (timerAlertVisible) return;
   lv_dir_t direction = logicalGestureDirection(input);
   if (weatherPageVisible || weatherInfoPageVisible) {
     // This object callback is intentionally inert so child labels, direct-LCD
@@ -607,6 +625,12 @@ void appPageGestureEvent(lv_event_t *event) {
     if (direction == LV_DIR_TOP) hideRadioStationList();
     return;
   }
+  if (worldCityListVisible) {
+    gestureStartX = -1;
+    gestureStartY = -1;
+    if (direction == LV_DIR_TOP) hideWorldCityList();
+    return;
+  }
   if (direction == LV_DIR_LEFT) {
     gestureStartX = -1;
     gestureStartY = -1;
@@ -628,6 +652,9 @@ void appPageGestureEvent(lv_event_t *event) {
     else if (musicPageVisible) hideMusicPage(true, true);
     else if (audiobookPageVisible) hideAudiobookPage(true, true);
     else if (radioPageVisible) hideRadioPage(true, true);
+    else if (worldClockPageVisible) hideWorldClockPage(true, true);
+    else if (photoFramePageVisible) hidePhotoFramePage(true, true);
+    else if (timerPageVisible) hideTimerPage(true, true);
     else if (weatherInfoPageVisible) hideWeatherInfoPage(true, true);
   }
 }
@@ -964,7 +991,7 @@ void createAppMenu() {
   lv_obj_add_flag(appMenu, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(appMenu, appMenuGestureEvent, LV_EVENT_GESTURE, nullptr);
 
-  for (uint8_t i = 0; i < 3; ++i) {
+  for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
     appMenuPages[i] = lv_obj_create(appMenu);
     lv_obj_remove_style_all(appMenuPages[i]);
     lv_obj_set_size(appMenuPages[i], APP_MENU_SIZE, APP_MENU_SIZE);
@@ -1009,13 +1036,26 @@ void createAppMenu() {
     appMenuPages[2], APP_MENU_POWER, 1, UI_ACCENT_ROSE);
   createTablerIcon(powerButton, TABLER_ICON_POWER, 80,
     themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+  lv_obj_t *worldButton = createAppTile(
+    appMenuPages[2], APP_MENU_WORLD_CLOCK, 2, UI_ACCENT_BLUE);
+  createTablerIcon(worldButton, TABLER_ICON_WORLD, 80,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+  lv_obj_t *photoButton = createAppTile(
+    appMenuPages[2], APP_MENU_PHOTO_FRAME, 3, UI_ACCENT_VIOLET);
+  createTablerIcon(photoButton, TABLER_ICON_PHOTO, 80,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+  lv_obj_t *timerButton = createAppTile(
+    appMenuPages[3], APP_MENU_TIMER, 0, UI_ACCENT_AMBER);
+  createTablerIcon(timerButton, TABLER_ICON_TIMER, 80,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
 
-  for (uint8_t i = 0; i < 3; ++i) {
+  for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
     appMenuPageDots[i] = lv_obj_create(appMenu);
     lv_obj_remove_style_all(appMenuPageDots[i]);
     lv_obj_set_style_radius(appMenuPageDots[i], LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(appMenuPageDots[i], lv_color_white(), 0);
-    lv_obj_align(appMenuPageDots[i], LV_ALIGN_BOTTOM_MID, (i - 1) * 18, -13);
+    lv_obj_align(appMenuPageDots[i], LV_ALIGN_BOTTOM_MID,
+                 (static_cast<int16_t>(i) * 2 - (APP_MENU_PAGE_COUNT - 1)) * 9, -13);
     lv_obj_clear_flag(appMenuPageDots[i],
                       LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
   }
@@ -1029,6 +1069,9 @@ void createAppMenu() {
   createMusicPage(screen);
   createAudiobookPage(screen);
   createRadioPage(screen);
+  createWorldClockPage(screen);
+  createPhotoFramePage(screen);
+  createTimerPage(screen);
   createWeatherWallpaperPage(screen);
   createWeatherInfoPage(screen);
 }
@@ -1039,7 +1082,7 @@ void refreshAppMenuTheme() {
   lv_obj_set_style_bg_color(appMenu, themePageBackground(), 0);
   for (uint8_t i = 0; i < appMenuTileCount; ++i)
     applyAppTileTheme(appMenuTileButtons[i], appMenuTileColors[i]);
-  for (uint8_t i = 0; i < 3; ++i) {
+  for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
     if (appMenuPageDots[i])
       lv_obj_set_style_bg_color(appMenuPageDots[i], themeText(), 0);
   }

@@ -7,8 +7,8 @@ constexpr uint32_t MUSIC_DEFAULT_SAMPLE_RATE = 44100;
 // Reserve I2S before the video DMA arena fragments internal SRAM. Eight 768 B
 // descriptors provide 1536 stereo frames (64 ms at 24 kHz). The longer queue
 // covers one JPEG core burst plus a 2 KiB WAV read without inserting silence.
-constexpr uint8_t MUSIC_I2S_DMA_BUFFER_COUNT = 8;
-constexpr uint16_t MUSIC_I2S_DMA_BUFFER_BYTES = 768;
+constexpr uint8_t MUSIC_I2S_DMA_BUFFER_COUNT = 10;
+constexpr uint16_t MUSIC_I2S_DMA_BUFFER_BYTES = 1024;
 
 lv_obj_t *musicProgressBar = nullptr;
 uint32_t musicProgressLastUpdateAt = 0;
@@ -859,7 +859,7 @@ void generateAlarmSamples(int16_t *samples, uint16_t count) {
 }
 
 void serviceAlarmSound() {
-  if (!alarmToneActive || !alarmAlertVisible || !musicOutput) return;
+  if (!alarmToneActive || (!alarmAlertVisible && !timerAlertVisible) || !musicOutput) return;
   int16_t samples[ALARM_FEED_BLOCK_FRAMES];
   for (uint8_t block = 0; block < ALARM_FEED_MAX_BLOCKS; ++block) {
     // Save the synthesizer cursor because the zero-timeout I2S write can

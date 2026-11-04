@@ -43,6 +43,10 @@ const lv_font_t *currentStandbyClockFont() {
     case CLOCK_FONT_KAMERON: return &lv_font_kameron_96;
     case CLOCK_FONT_SILKSCREEN: return &lv_font_silkscreen_96;
     case CLOCK_FONT_DOTGOTHIC16: return &lv_font_dotgothic16_96;
+    case CLOCK_FONT_ORBITRON: return &lv_font_orbitron_96;
+    case CLOCK_FONT_AUDIOWIDE: return &lv_font_audiowide_96;
+    case CLOCK_FONT_CINZEL: return &lv_font_cinzel_96;
+    case CLOCK_FONT_BEBASNEUE: return &lv_font_bebasneue_96;
     default: return &lv_font_montserrat_time_96;
   }
 }
@@ -53,6 +57,10 @@ const lv_font_t *currentClockFont() {
     case CLOCK_FONT_KAMERON: return &lv_font_kameron_48;
     case CLOCK_FONT_SILKSCREEN: return &lv_font_silkscreen_48;
     case CLOCK_FONT_DOTGOTHIC16: return &lv_font_dotgothic16_48;
+    case CLOCK_FONT_ORBITRON: return &lv_font_orbitron_48;
+    case CLOCK_FONT_AUDIOWIDE: return &lv_font_audiowide_48;
+    case CLOCK_FONT_CINZEL: return &lv_font_cinzel_48;
+    case CLOCK_FONT_BEBASNEUE: return &lv_font_bebasneue_48;
     default: return &lv_font_montserrat_48;
   }
 }
@@ -166,6 +174,37 @@ void resizeTimePanelForText(const char *text) {
   lv_obj_center(timeBackground);
 }
 
+// Selectable clock digit colors. Index 0 follows the active OS theme.
+constexpr uint8_t CLOCK_COLOR_COUNT = 9;
+static constexpr uint32_t CLOCK_COLOR_PRESETS[CLOCK_COLOR_COUNT] = {
+  0x000000, // theme default (special-cased)
+  0xFFFFFF, // white
+  0xFFB000, // amber
+  0x00F0FF, // cyber cyan
+  0xFF6EC7, // synthwave pink
+  0x00FFC6, // aurora mint
+  0xFFD700, // gold
+  0x90E0EF, // ice blue
+  0xFF4D4D, // red
+};
+
+void applyClockColor() {
+  if (!timeLabel) return;
+  const lv_color_t color = clockColorIndex == 0
+    ? themeText()
+    : lv_color_hex(CLOCK_COLOR_PRESETS[
+        clockColorIndex < CLOCK_COLOR_COUNT ? clockColorIndex : 0]);
+  lv_obj_set_style_text_color(timeLabel, color, 0);
+}
+
+void setClockColor(uint8_t color, bool persist) {
+  color = min<uint8_t>(color, CLOCK_COLOR_COUNT - 1);
+  if (color == clockColorIndex) return;
+  clockColorIndex = color;
+  if (persist) preferences.putUChar("clock_color", clockColorIndex);
+  applyClockColor();
+}
+
 void applyClockFont() {
   if (!timeLabel) return;
   const lv_font_t *font = currentClockFont();
@@ -176,6 +215,7 @@ void applyClockFont() {
     font = lowPowerMode ? &lv_font_montserrat_time_96 : &lv_font_montserrat_48;
   }
   lv_obj_set_style_text_font(timeLabel, font, 0);
+  applyClockColor();
   timePanelWidth = 0;
   resizeTimePanelForText(displayedTimeText[0] ? displayedTimeText : "--:--");
   lv_obj_center(timeLabel);
@@ -273,12 +313,12 @@ void refreshClockTheme() {
   lv_obj_set_style_bg_color(screen, themePageBackground(), 0);
   lv_obj_set_style_bg_grad_dir(screen, LV_GRAD_DIR_NONE, 0);
   if (timeLabel) {
-    lv_obj_set_style_text_color(timeLabel, themeText(), 0);
-    // A faint phosphor glow on the big digits sells the CRT look. It is only
-    // redrawn once a minute, so the complex-draw shadow cost is negligible.
-    lv_obj_set_style_shadow_color(timeLabel, lv_color_hex(CRT_AMBER_GLOW), 0);
-    lv_obj_set_style_shadow_width(timeLabel, themeIsAmber() ? 8 : 0, 0);
-    lv_obj_set_style_shadow_opa(timeLabel, themeIsAmber() ? LV_OPA_40 : LV_OPA_TRANSP, 0);
+    applyClockColor();
+    // A faint glow sells the CRT / neon looks. It is only redrawn once a
+    // minute, so the complex-draw shadow cost is negligible.
+    lv_obj_set_style_shadow_color(timeLabel, lv_color_hex(themeGlowColor()), 0);
+    lv_obj_set_style_shadow_width(timeLabel, themeHasGlow() ? 8 : 0, 0);
+    lv_obj_set_style_shadow_opa(timeLabel, themeHasGlow() ? LV_OPA_40 : LV_OPA_TRANSP, 0);
   }
   if (dateLabel) lv_obj_set_style_text_color(dateLabel, themeTextDim(0xDCEBFF), 0);
   if (statusLabel) lv_obj_set_style_text_color(statusLabel, themeTextDim(0x91A4BE), 0);

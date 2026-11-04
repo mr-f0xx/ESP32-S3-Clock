@@ -149,7 +149,7 @@ uint32_t appMenuClickSuppressedUntil = 0;
 void mainUiGestureEvent(lv_event_t *event) {
   if (lv_event_get_code(event) != LV_EVENT_GESTURE || lowPowerMode) return;
   lv_indev_t *input = lv_indev_get_act();
-  if (!input) return;
+  if (!input || timerAlertVisible) return;
 
   const lv_dir_t direction = logicalGestureDirection(input);
   if (!controlPanelVisible && alarmPageVisible &&
@@ -166,19 +166,19 @@ void mainUiGestureEvent(lv_event_t *event) {
     hideAlarmPage(true, true);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
       !alarmPageVisible &&
-      !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
+      !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible && !worldClockPageVisible && !photoFramePageVisible && !timerPageVisible &&
       direction == LV_DIR_LEFT) {
     gestureStartY = -1;
     handleGlobalNavigationStep(1);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
              !alarmPageVisible &&
-             !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
+             !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible && !worldClockPageVisible && !photoFramePageVisible && !timerPageVisible &&
              direction == LV_DIR_RIGHT) {
     gestureStartY = -1;
     handleGlobalNavigationStep(-1);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
              !alarmPageVisible &&
-             !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
+             !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible && !worldClockPageVisible && !photoFramePageVisible && !timerPageVisible &&
              direction == LV_DIR_BOTTOM &&
       gestureStartY >= 0 && gestureStartY <= CONTROL_PANEL_GESTURE_EDGE) {
     gestureStartY = -1;
@@ -189,21 +189,21 @@ void mainUiGestureEvent(lv_event_t *event) {
     hideControlPanel(true);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
              !alarmPageVisible &&
-             !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible &&
+             !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible && !weatherInfoPageVisible && !worldClockPageVisible && !photoFramePageVisible && !timerPageVisible &&
              direction == LV_DIR_TOP &&
              gestureStartY >= SCREEN_HEIGHT - CONTROL_PANEL_GESTURE_EDGE) {
     gestureStartY = -1;
     showAppMenu(true);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
              !alarmPageVisible && !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible &&
-             !weatherInfoPageVisible &&
+             !weatherInfoPageVisible && !worldClockPageVisible && !photoFramePageVisible && !timerPageVisible &&
              direction == LV_DIR_BOTTOM) {
     gestureStartX = -1;
     gestureStartY = -1;
     handleGlobalNavigationStep(-1);
   } else if (!controlPanelVisible && !appMenuVisible && !calendarPageVisible &&
              !alarmPageVisible && !musicPageVisible && !audiobookPageVisible && !radioPageVisible && !weatherPageVisible &&
-             !weatherInfoPageVisible &&
+             !weatherInfoPageVisible && !worldClockPageVisible && !photoFramePageVisible && !timerPageVisible &&
              direction == LV_DIR_TOP) {
     gestureStartX = -1;
     gestureStartY = -1;
@@ -532,10 +532,17 @@ void languageControlEvent(lv_event_t *event) {
   setUiLanguage(uiLanguage == UI_LANG_FR ? UI_LANG_EN : UI_LANG_FR, true);
 }
 
+void colorControlEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  markUserActivity();
+  setClockColor(static_cast<uint8_t>((clockColorIndex + 1) % CLOCK_COLOR_COUNT), true);
+  updateControlPillLabels();
+}
+
 void themeControlEvent(lv_event_t *event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
   markUserActivity();
-  setUiTheme(uiTheme == UI_THEME_AMBER ? UI_THEME_BLACK : UI_THEME_AMBER, true);
+  setUiTheme(static_cast<uint8_t>((uiTheme + 1) % UI_THEME_COUNT), true);
 }
 
 lv_obj_t *createControlPillButton(int16_t x, lv_event_cb_t callback,
@@ -565,7 +572,14 @@ void updateControlPillLabels() {
   if (languageControlLabel)
     lv_label_set_text(languageControlLabel, uiLanguage == UI_LANG_FR ? "FR" : "EN");
   if (themeControlLabel)
-    lv_label_set_text(themeControlLabel, themeIsAmber() ? "CRT" : "STD");
+    lv_label_set_text(themeControlLabel, themeShortName());
+  if (colorControlLabel) {
+    static const char *const colorNames[CLOCK_COLOR_COUNT] = {
+      "THM", "WHT", "AMB", "CYN", "PNK", "MNT", "GLD", "ICE", "RED"
+    };
+    lv_label_set_text(colorControlLabel,
+      colorNames[clockColorIndex < CLOCK_COLOR_COUNT ? clockColorIndex : 0]);
+  }
 }
 
 void createControlPanel() {
@@ -599,6 +613,8 @@ void createControlPanel() {
 
   languageControlButton = createControlPillButton(290, languageControlEvent,
                                                   &languageControlLabel);
+  colorControlButton = createControlPillButton(198, colorControlEvent,
+                                               &colorControlLabel);
   themeControlButton = createControlPillButton(382, themeControlEvent,
                                                &themeControlLabel);
   updateControlPillLabels();
@@ -671,7 +687,7 @@ void refreshControlPanelTheme() {
   if (wifiControlStatus) lv_obj_set_style_bg_color(wifiControlStatus, lv_color_black(), 0);
   if (wifiControlIp) lv_obj_set_style_bg_color(wifiControlIp, lv_color_black(), 0);
   if (bluetoothControlStatus) lv_obj_set_style_bg_color(bluetoothControlStatus, lv_color_black(), 0);
-  for (lv_obj_t *button : {languageControlButton, themeControlButton}) {
+  for (lv_obj_t *button : {languageControlButton, colorControlButton, themeControlButton}) {
     if (!button) continue;
     lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0A0A0A)), 0);
     lv_obj_set_style_border_color(button, lv_color_hex(themeBorder(0x2A2A2A)), 0);

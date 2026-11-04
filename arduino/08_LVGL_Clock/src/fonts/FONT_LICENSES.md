@@ -7,9 +7,15 @@ The generated LVGL bitmap subsets in this directory use these Google Fonts:
 - DotGothic16
 - Inter (weather time and temperature)
 - Montserrat (UI accent fallback, `lv_font_accent_*`)
+- Orbitron (retro-futuristic clock face)
+- Audiowide (retro-futuristic clock face)
+- Cinzel (elegant serif clock face)
+- Bebas Neue (condensed clock face)
 
 All of these source families are distributed under the SIL Open Font License 1.1.
-Only `0-9`, `:` and `-` were converted at 48 px for the clock display.
+Only `0-9`, `:` and `-` were converted at 48 px and 96 px for the clock display.
+Orbitron and Cinzel are variable fonts upstream; the converted subsets were
+instantiated at weight 700 before running `lv_font_conv`.
 The Inter weather subset contains space, `-`, `0-9`, `:`, and `\u00b0` at a true
 52 px size; LVGL object scaling is not used.
 

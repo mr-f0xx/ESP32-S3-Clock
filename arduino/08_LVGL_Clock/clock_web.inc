@@ -120,6 +120,8 @@ void handleStatus() {
   json += String(imageCount);
   json += F(",\"font\":");
   json += String(clockFontIndex);
+  json += F(",\"color\":");
+  json += String(clockColorIndex);
   json += F(",\"night_start\":");
   json += String(nightStartMinute);
   json += F(",\"night_end\":");
@@ -185,6 +187,17 @@ void handleUiSettings() {
     }
     if (static_cast<uint8_t>(lang) != uiLanguage) {
       setUiLanguage(static_cast<uint8_t>(lang), true);
+      changed = true;
+    }
+  }
+  if (server.hasArg("color")) {
+    const long color = server.arg("color").toInt();
+    if (color < 0 || color >= CLOCK_COLOR_COUNT) {
+      server.send(400, "text/plain; charset=utf-8", "Invalid clock color");
+      return;
+    }
+    if (static_cast<uint8_t>(color) != clockColorIndex) {
+      setClockColor(static_cast<uint8_t>(color), true);
       changed = true;
     }
   }
@@ -504,6 +517,8 @@ void loadSettings() {
   clockFontIndex = min(preferences.getUChar("clock_font", CLOCK_FONT_MONTSERRAT),
                        static_cast<uint8_t>(CLOCK_FONT_COUNT - 1));
   pendingClockFontIndex = clockFontIndex;
+  clockColorIndex = min<uint8_t>(preferences.getUChar("clock_color", 0),
+                                 CLOCK_COLOR_COUNT - 1);
   applyClockFont();
   syncControlPanelSettings();
   syncAlarmUi();

@@ -98,7 +98,8 @@ void disableLowPowerKeyWakeup() {
 }
 
 enum class LowPowerRestoreApp : uint8_t {
-  Album, AppMenu, Calendar, Alarm, Music, Audiobook, Radio, Weather, WeatherInfo
+  Album, AppMenu, Calendar, Alarm, Music, Audiobook, Radio, Weather, WeatherInfo,
+  WorldClock, PhotoFrame, Timer
 };
 
 LowPowerRestoreApp lowPowerRestoreApp = LowPowerRestoreApp::Album;
@@ -131,6 +132,9 @@ void captureLowPowerRestoreLocation() {
   else if (musicPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Music;
   else if (alarmPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Alarm;
   else if (calendarPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Calendar;
+  else if (worldClockPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::WorldClock;
+  else if (photoFramePageVisible) lowPowerRestoreApp = LowPowerRestoreApp::PhotoFrame;
+  else if (timerPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Timer;
   else if (appMenuVisible) lowPowerRestoreApp = LowPowerRestoreApp::AppMenu;
   else lowPowerRestoreApp = LowPowerRestoreApp::Album;
 }
@@ -156,6 +160,9 @@ void restoreLowPowerLocation() {
       else showWeatherWallpaperPage(false);
       break;
     case LowPowerRestoreApp::WeatherInfo: showWeatherInfoPage(false); break;
+    case LowPowerRestoreApp::WorldClock: showWorldClockPage(false); break;
+    case LowPowerRestoreApp::PhotoFrame: showPhotoFramePage(false); break;
+    case LowPowerRestoreApp::Timer: showTimerPage(false); break;
     default: break;
   }
   if (lowPowerRestoreControlPanel &&
@@ -232,6 +239,10 @@ void enterLowPowerClockMode() {
   suspendAudiobookForLowPower();
   suspendRadioForLowPower();
   suspendMusicForLowPower(weatherSdIdle);
+  hideWorldClockPage(false, false);
+  suspendPhotoFrameForLowPower();
+  if (timerAlertVisible) dismissTimerAlert();
+  suspendTimerForLowPower();
   suspendImageKeys();
   enableLowPowerKeyWakeup();
 
@@ -569,6 +580,12 @@ void runLowPowerClock() {
     }
   }
 
+  if (timerRunning && static_cast<int32_t>(nowMs - timerEndsAt) >= 0) {
+    exitLowPowerClockMode();
+    finishTimer();
+    return;
+  }
+
   if (rtcReady && rtcTimeValid &&
       static_cast<int32_t>(nowMs - lowPowerNextClockPollAt) >= 0) {
     lowPowerNextClockPollAt =
@@ -609,7 +626,7 @@ void runLowPowerClock() {
   }
 
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
-  if (sleepTimeDisplayEnabled || anyAlarmEnabled()) {
+  if (sleepTimeDisplayEnabled || anyAlarmEnabled() || timerRunning) {
     uint32_t nextWakeMs = LOW_POWER_CLOCK_POLL_SECONDS * 1000UL;
     if (rtcReady && rtcTimeValid) {
       const int32_t clockRemaining =
@@ -617,6 +634,12 @@ void runLowPowerClock() {
       nextWakeMs = min(nextWakeMs,
                        clockRemaining > 0
                          ? static_cast<uint32_t>(clockRemaining) : 1U);
+    }
+    if (timerRunning) {
+      const int32_t timerRemaining = static_cast<int32_t>(timerEndsAt - nowMs);
+      nextWakeMs = min(nextWakeMs,
+                       timerRemaining > 0
+                         ? static_cast<uint32_t>(timerRemaining) : 1U);
     }
     esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(nextWakeMs) * 1000ULL);
   }
