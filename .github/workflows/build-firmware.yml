@@ -232,11 +232,12 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
+          assets=(dist/*.bin dist/SHA256SUMS.txt dist/BUILD_INFO.txt)
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" dist/* --clobber
+            gh release upload "$tag" "${assets[@]}" --clobber
           else
-            gh release create "$tag" dist/* \
-              --title "$tag" \
+            gh release create "$tag" "${assets[@]}" \
+              --title "ESP32-S3 LVGL Clock $tag" \
               --notes-file dist/RELEASE_NOTES.md \
               --verify-tag
           fi

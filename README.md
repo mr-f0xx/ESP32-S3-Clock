@@ -168,6 +168,15 @@ FQBN: esp32:esp32:esp32s3:FlashSize=16M,PartitionScheme=custom,PSRAM=opi,CDCOnBo
 
 CI 每次都会从 `clock_weather_config.example.h` 生成本地被忽略的 `clock_weather_config.h`，所以发布的固件不含个人天气 API Key，烧录后需在设备网页设置里重新填写 Wi-Fi 与和风天气。
 
+**发布带固件的 Release**
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+标签推送后工作流会自动编译，并把 `LVGL_Clock_16MB.merged.bin`、`LVGL_Clock_app.bin`、`SHA256SUMS.txt`、`BUILD_INFO.txt` 附加到同名 Release。
+
 **本地构建**
 
 ```powershell
