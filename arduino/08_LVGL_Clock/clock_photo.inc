@@ -285,7 +285,7 @@ void photoBackEvent(lv_event_t *event) {
 }
 
 void showPhotoFramePage(bool fade) {
-  if (!photoFramePage || lowPowerMode || photoFramePageVisible) return;
+  if (lowPowerMode || photoFramePageVisible) return;
   if (fade) {
     beginScreenFade(activeBrightness);
     hideAppMenu(false);
@@ -295,6 +295,8 @@ void showPhotoFramePage(bool fade) {
     endScreenFade(activeBrightness);
     return;
   }
+  if (!photoFramePage) createPhotoFramePage(lv_scr_act());
+  if (!photoFramePage) return;
   photoFramePageVisible = true;
   lv_obj_clear_flag(photoFramePage, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(photoFramePage);

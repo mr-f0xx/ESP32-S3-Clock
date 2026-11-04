@@ -1069,9 +1069,9 @@ void createAppMenu() {
   createMusicPage(screen);
   createAudiobookPage(screen);
   createRadioPage(screen);
-  createWorldClockPage(screen);
-  createPhotoFramePage(screen);
-  createTimerPage(screen);
+  // The newer app pages are constructed lazily on first open. Building every
+  // page eagerly at boot exhausted LVGL's fixed object pool on the device and
+  // left the panel black before the launcher could be shown.
   createWeatherWallpaperPage(screen);
   createWeatherInfoPage(screen);
 }

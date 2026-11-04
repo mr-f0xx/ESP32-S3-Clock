@@ -160,7 +160,7 @@ void timerPresetEvent(lv_event_t *event) {
 }
 
 void showTimerPage(bool fade) {
-  if (!timerPage || lowPowerMode || timerPageVisible) return;
+  if (lowPowerMode || timerPageVisible) return;
   if (fade) {
     beginScreenFade(activeBrightness);
     hideAppMenu(false);
@@ -170,6 +170,8 @@ void showTimerPage(bool fade) {
     endScreenFade(activeBrightness);
     return;
   }
+  if (!timerPage) createTimerPage(lv_scr_act());
+  if (!timerPage) return;
   timerPageVisible = true;
   lv_obj_clear_flag(timerPage, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(timerPage);
