@@ -104,13 +104,25 @@ jobs:
 
       - name: Compile firmware
         run: |
-          set -euo pipefail
+          set -uo pipefail
           arduino-cli compile \
             --fqbn "$FQBN" \
             --libraries "$GITHUB_WORKSPACE/$LIBRARIES_DIR" \
             --build-path "$GITHUB_WORKSPACE/build" \
             --warnings none \
-            "$SKETCH_DIR"
+            "$SKETCH_DIR" 2>&1 | tee "$GITHUB_WORKSPACE/compile.log"
+          status="${PIPESTATUS[0]}"
+          if [ "$status" -ne 0 ]; then
+            # Surface compiler diagnostics as check annotations so they show up
+            # in the PR checks view without opening the full job log.
+            grep -nE "error:|fatal error|undefined reference|No such file" "$GITHUB_WORKSPACE/compile.log" \
+              | head -n 10 \
+              | while IFS= read -r line; do
+                  echo "::error title=Compile error::${line}"
+                done
+            echo "::error title=arduino-cli::Compile failed with exit code ${status}"
+            exit "$status"
+          fi
 
       - name: Collect firmware artifacts
         run: |
