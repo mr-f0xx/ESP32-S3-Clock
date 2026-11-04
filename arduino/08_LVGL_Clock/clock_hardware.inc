@@ -346,6 +346,8 @@ void audioFriendlyDelay(uint32_t durationMs) {
   const uint32_t startedAt = millis();
   do {
     serviceMusicPlayback();
+    serviceAudiobookPlayback();
+    serviceRadioPlayback();
     delay(1);
   } while (millis() - startedAt < durationMs);
 }

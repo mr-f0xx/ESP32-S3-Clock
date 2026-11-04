@@ -161,8 +161,42 @@ void handleStatus() {
   json += weatherWallpaperFollowEnabled ? F("true") : F("false");
   json += F(",\"weather_minutes\":");
   json += String(weatherSwitchMinutes);
+  json += F(",\"lang\":");
+  json += String(uiLanguage);
+  json += F(",\"theme\":");
+  json += String(uiTheme);
   json += '}';
   server.send(200, "application/json; charset=utf-8", json);
+}
+
+// Appearance: device UI language (0=EN, 1=FR) and theme (0=AMOLED black,
+// 1=CRT amber). Applied through the same fade path as the on-device pills.
+void handleUiSettings() {
+  markUserActivity();
+  bool changed = false;
+  if (server.hasArg("lang")) {
+    const long lang = server.arg("lang").toInt();
+    if (lang < 0 || lang >= UI_LANG_COUNT) {
+      server.send(400, "text/plain; charset=utf-8", "Invalid language");
+      return;
+    }
+    if (static_cast<uint8_t>(lang) != uiLanguage) {
+      setUiLanguage(static_cast<uint8_t>(lang), true);
+      changed = true;
+    }
+  }
+  if (server.hasArg("theme")) {
+    const long theme = server.arg("theme").toInt();
+    if (theme < 0 || theme >= UI_THEME_COUNT) {
+      server.send(400, "text/plain; charset=utf-8", "Invalid theme");
+      return;
+    }
+    if (static_cast<uint8_t>(theme) != uiTheme) {
+      setUiTheme(static_cast<uint8_t>(theme), true);
+      changed = true;
+    }
+  }
+  server.send(200, "text/plain; charset=utf-8", changed ? "OK" : "NOCHANGE");
 }
 
 bool parseClockMinute(const String &value, uint16_t &minuteOfDay) {
@@ -382,6 +416,7 @@ void startWebServer() {
   server.on("/sleep-settings", HTTP_POST, handleSleepSettings);
   server.on("/weather-settings", HTTP_POST, handleWeatherSettings);
   server.on("/background-switch", HTTP_POST, handleBackgroundSwitchSettings);
+  server.on("/ui-settings", HTTP_POST, handleUiSettings);
   server.on("/generate_204", HTTP_ANY, redirectToPortal);
   server.on("/hotspot-detect.html", HTTP_ANY, redirectToPortal);
   server.on("/fwlink", HTTP_ANY, redirectToPortal);
@@ -396,6 +431,10 @@ void startWebServer() {
 
 void loadSettings() {
   preferences.begin("clock", false);
+  uiLanguage = min<uint8_t>(preferences.getUChar("ui_lang", UI_LANG_EN),
+                            UI_LANG_COUNT - 1);
+  uiTheme = min<uint8_t>(preferences.getUChar("ui_theme", UI_THEME_BLACK),
+                         UI_THEME_COUNT - 1);
   savedSsid = preferences.getString("ssid", "");
   savedPassword = preferences.getString("pass", "");
   timezoneRule = preferences.getString("tz", "CST-8");
@@ -440,6 +479,8 @@ void loadSettings() {
   musicPlaybackMode = min<uint8_t>(
     preferences.getUChar("music_mode", MUSIC_MODE_REPEAT_ALL),
     MUSIC_MODE_COUNT - 1);
+  radioStationIndex = min<uint8_t>(preferences.getUChar("radio_station", 0),
+                                   RADIO_STATION_COUNT - 1);
   for (uint8_t i = 0; i < 3; ++i) {
     char key[8];
     snprintf(key, sizeof(key), "a%u_h", i);
@@ -456,4 +497,7 @@ void loadSettings() {
   syncControlPanelSettings();
   syncAlarmUi();
   updateMusicPlaybackModeIcon();
+  // Apply the persisted language + theme to every page. Idempotent, so this is
+  // also safe on wake (exitLowPowerClockMode calls loadSettings again).
+  applyUiAppearance();
 }

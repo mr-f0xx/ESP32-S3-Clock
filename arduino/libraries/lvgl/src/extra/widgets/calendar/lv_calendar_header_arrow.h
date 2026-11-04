@@ -36,6 +36,15 @@ extern const lv_obj_class_t lv_calendar_header_arrow_class;
  */
 lv_obj_t * lv_calendar_header_arrow_create(lv_obj_t * parent);
 
+/**
+ * Override the month names used by every arrow-style calendar header.
+ * The array must contain 12 month name strings that remain valid for the
+ * lifetime of the UI (e.g. static translated strings). Existing headers are
+ * not refreshed automatically; re-set the showed date to update their labels.
+ * @param month_names  array of 12 month name strings (January..December)
+ */
+void lv_calendar_header_arrow_set_month_names(const char * month_names[]);
+
 /**********************
  *      MACROS
  **********************/

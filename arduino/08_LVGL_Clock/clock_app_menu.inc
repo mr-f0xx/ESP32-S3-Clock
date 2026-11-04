@@ -18,6 +18,13 @@ constexpr uint8_t APP_MENU_ITEMS_PER_PAGE = 4;
 lv_obj_t *clockModeSelector = nullptr;
 bool clockModeChoiceBusy = false;
 uint32_t clockModeChoiceSuppressedUntil = 0;
+// Track the launcher tiles so a theme change can recolor every key without
+// rebuilding the menu. The base color is the per-app accent used in the black
+// theme; the amber theme turns each tile into a black, amber-outlined key.
+constexpr uint8_t APP_MENU_TILE_CAPACITY = 9;
+lv_obj_t *appMenuTileButtons[APP_MENU_TILE_CAPACITY] = {};
+uint32_t appMenuTileColors[APP_MENU_TILE_CAPACITY] = {};
+uint8_t appMenuTileCount = 0;
 
 enum AppMenuItem : uint8_t {
   APP_MENU_CLOCK = 0,
@@ -26,7 +33,9 @@ enum AppMenuItem : uint8_t {
   APP_MENU_MUSIC,
   APP_MENU_CALENDAR,
   APP_MENU_VIDEO,
-  APP_MENU_WEATHER
+  APP_MENU_WEATHER,
+  APP_MENU_AUDIOBOOK,
+  APP_MENU_RADIO
 };
 
 void cancelPendingAppLaunches() {
@@ -35,6 +44,7 @@ void cancelPendingAppLaunches() {
   calendarPageShowRequested = false;
   alarmPageShowRequested = false;
   musicPageShowRequested = false;
+  audiobookPageShowRequested = false;
   weatherPageShowRequested = false;
   weatherInfoPageShowRequested = false;
   appMenuHideRequested = false;
@@ -46,7 +56,7 @@ void consumeCurrentTouchRelease() {
 }
 
 void updateAppMenuPageVisibility() {
-  for (uint8_t i = 0; i < 2; ++i) {
+  for (uint8_t i = 0; i < 3; ++i) {
     if (appMenuPages[i]) {
       if (i == appMenuPageIndex) lv_obj_clear_flag(appMenuPages[i], LV_OBJ_FLAG_HIDDEN);
       else lv_obj_add_flag(appMenuPages[i], LV_OBJ_FLAG_HIDDEN);
@@ -56,7 +66,7 @@ void updateAppMenuPageVisibility() {
                       i == appMenuPageIndex ? 9 : 6);
       lv_obj_set_style_bg_opa(appMenuPageDots[i],
                               i == appMenuPageIndex ? LV_OPA_COVER : LV_OPA_30, 0);
-      lv_obj_align(appMenuPageDots[i], LV_ALIGN_BOTTOM_MID, i ? 9 : -9, -13);
+      lv_obj_align(appMenuPageDots[i], LV_ALIGN_BOTTOM_MID, (i - 1) * 18, -13);
     }
   }
 }
@@ -70,11 +80,46 @@ void updateCalendarToday() {
   lv_calendar_set_showed_date(calendarWidget, current.getYear(), current.getMonth());
 }
 
+// Apply the selected language to the calendar's month and weekday names.
+// Re-setting the showed date makes the arrow header rebuild its month label.
+void applyCalendarLocalization() {
+  if (!calendarWidget) return;
+  const uint8_t lang = uiLanguage < UI_LANG_COUNT ? uiLanguage : UI_LANG_EN;
+  lv_calendar_header_arrow_set_month_names(
+    const_cast<const char **>(CALENDAR_MONTHS[lang]));
+  lv_calendar_set_day_names(calendarWidget,
+                            const_cast<const char **>(CALENDAR_DAYS[lang]));
+  const lv_calendar_date_t *shown = lv_calendar_get_showed_date(calendarWidget);
+  if (shown)
+    lv_calendar_set_showed_date(calendarWidget, shown->year, shown->month);
+}
+
+// Re-apply the active theme to the full-screen calendar.
+void refreshCalendarTheme() {
+  if (!calendarPage) return;
+  lv_obj_set_style_bg_color(calendarPage, themePageBackground(), 0);
+  if (!calendarWidget) return;
+  lv_obj_set_style_bg_color(calendarWidget, themePageBackground(), 0);
+  lv_obj_set_style_text_color(calendarWidget, themeText(), 0);
+  lv_obj_t *header = lv_obj_get_child(calendarWidget, 0);
+  if (header) {
+    lv_obj_t *monthLabel = lv_obj_get_child(header, 1);
+    if (monthLabel) lv_obj_set_style_text_color(monthLabel, themeText(), 0);
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(header); ++i) {
+      lv_obj_t *child = lv_obj_get_child(header, i);
+      if (lv_obj_get_child_cnt(child))
+        setTablerIconColor(lv_obj_get_child(child, 0), themeIcon());
+    }
+  }
+  applyCalendarLocalization();
+}
+
 void showAppMenu(bool fade) {
   if (!appMenu || lowPowerMode || appMenuVisible || appMenuShowRequested ||
       controlPanelVisible || controlPanelShowRequested || calendarPageVisible ||
       calendarPageShowRequested || alarmPageVisible || alarmPageShowRequested ||
-      musicPageVisible || musicPageShowRequested || weatherPageVisible ||
+      musicPageVisible || musicPageShowRequested || audiobookPageVisible ||
+      audiobookPageShowRequested || weatherPageVisible ||
       weatherPageShowRequested || weatherInfoPageVisible ||
       weatherInfoPageShowRequested) return;
   if (fade) {
@@ -181,6 +226,10 @@ void handleGlobalNavigationStep(int8_t direction) {
     selectAlarmSlotRelative(direction);
   } else if (musicPageVisible) {
     selectAdjacentMusicTrack(direction);
+  } else if (audiobookPageVisible) {
+    selectAdjacentAudiobook(direction);
+  } else if (radioPageVisible) {
+    selectAdjacentRadioStation(direction);
   } else if (weatherPageVisible) {
     // Physical +/- and weather swipes share the same ordered scene playlist.
     selectAdjacentWeatherWallpaper(direction);
@@ -241,7 +290,7 @@ void processAppMenuTransition() {
     const int8_t step = appMenuPageStepRequested;
     appMenuPageStepRequested = 0;
     const uint8_t nextPage = constrain(
-      static_cast<int16_t>(appMenuPageIndex) + step, 0, 1);
+      static_cast<int16_t>(appMenuPageIndex) + step, 0, 2);
     if (nextPage != appMenuPageIndex) {
       beginScreenFade(activeBrightness);
       appMenuPageIndex = nextPage;
@@ -294,7 +343,7 @@ void appMenuItemEvent(lv_event_t *event) {
       static_cast<int32_t>(now - appMenuClickSuppressedUntil) < 0) return;
   const AppMenuItem item = static_cast<AppMenuItem>(
     reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
-  if (item > APP_MENU_WEATHER) return;
+  if (item > APP_MENU_RADIO) return;
   // Guard every normal click too, not only a preceding swipe. CST9217 can
   // occasionally report another press after release, especially near a
   // rotation; without this lock the second sample could launch another tile.
@@ -320,6 +369,10 @@ void appMenuItemEvent(lv_event_t *event) {
     showAlarmPage(true);
   } else if (item == APP_MENU_MUSIC) {
     showMusicPage(true);
+  } else if (item == APP_MENU_AUDIOBOOK) {
+    showAudiobookPage(true);
+  } else if (item == APP_MENU_RADIO) {
+    showRadioPage(true);
   } else {
     // The Settings tile exposes the same configuration page served over the
     // normal Wi-Fi connection, but through a predictable local hotspot.
@@ -349,7 +402,7 @@ void updateWifiSetupPage() {
   if (wifiSetupSsidLabel)
     lv_label_set_text_fmt(wifiSetupSsidLabel, "%s", apSsid);
   if (wifiSetupPasswordLabel)
-    lv_label_set_text(wifiSetupPasswordLabel, "Open network - no password");
+    lv_label_set_text(wifiSetupPasswordLabel, tr(STR_OPEN_NETWORK_NO_PASS));
 }
 
 void createWifiSetupPage() {
@@ -357,7 +410,7 @@ void createWifiSetupPage() {
   lv_obj_remove_style_all(wifiSetupPage);
   lv_obj_set_pos(wifiSetupPage, 0, 0);
   lv_obj_set_size(wifiSetupPage, APP_MENU_SIZE, APP_MENU_SIZE);
-  lv_obj_set_style_bg_color(wifiSetupPage, lv_color_hex(0x0D0F14), 0);
+  lv_obj_set_style_bg_color(wifiSetupPage, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(wifiSetupPage, LV_OPA_COVER, 0);
   lv_obj_clear_flag(wifiSetupPage,
                     LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
@@ -367,65 +420,65 @@ void createWifiSetupPage() {
   lv_obj_set_size(backButton, 56, 56);
   lv_obj_align(backButton, LV_ALIGN_TOP_LEFT, 22, 22);
   lv_obj_set_style_radius(backButton, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(backButton, lv_color_hex(0x20242D), 0);
+  lv_obj_set_style_bg_color(backButton, lv_color_hex(themeSurface(0x0A0A0A)), 0);
   lv_obj_set_style_bg_opa(backButton, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(backButton, 1, 0);
-  lv_obj_set_style_border_color(backButton, lv_color_hex(0x3D4654), 0);
+  lv_obj_set_style_border_color(backButton, lv_color_hex(themeBorder(0x2A2A2A)), 0);
   lv_obj_set_style_shadow_width(backButton, 0, 0);
   lv_obj_clear_flag(backButton,
                     LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_event_cb(backButton, wifiSetupBackEvent, LV_EVENT_CLICKED, nullptr);
-  createTablerIcon(backButton, TABLER_ICON_CHEVRON_LEFT, 30);
+  createTablerIcon(backButton, TABLER_ICON_CHEVRON_LEFT, 30, themeIcon());
 
   lv_obj_t *title = lv_label_create(wifiSetupPage);
-  lv_label_set_text(title, "Wi-Fi Setup");
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_30, 0);
-  lv_obj_set_style_text_color(title, lv_color_white(), 0);
+  i18nRegister(title, STR_WIFI_SETUP);
+  lv_obj_set_style_text_font(title, &lv_font_ui_30, 0);
+  lv_obj_set_style_text_color(title, themeText(), 0);
   lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 33);
 
   lv_obj_t *firstStep = lv_label_create(wifiSetupPage);
-  lv_label_set_text(firstStep, "1. Connect your phone to this Wi-Fi");
+  i18nRegister(firstStep, STR_SETUP_STEP1);
   lv_obj_set_width(firstStep, 420);
   lv_obj_set_style_text_align(firstStep, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(firstStep, &lv_font_montserrat_22, 0);
-  lv_obj_set_style_text_color(firstStep, lv_color_hex(0xCBD5E1), 0);
+  lv_obj_set_style_text_font(firstStep, &lv_font_ui_22, 0);
+  lv_obj_set_style_text_color(firstStep, themeTextDim(0xCBD5E1), 0);
   lv_obj_align(firstStep, LV_ALIGN_TOP_MID, 0, 104);
 
   wifiSetupSsidLabel = lv_label_create(wifiSetupPage);
   lv_obj_set_width(wifiSetupSsidLabel, 430);
   lv_obj_set_style_text_align(wifiSetupSsidLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(wifiSetupSsidLabel, &lv_font_montserrat_28, 0);
-  lv_obj_set_style_text_color(wifiSetupSsidLabel, lv_color_hex(UI_ACCENT_BLUE), 0);
+  lv_obj_set_style_text_font(wifiSetupSsidLabel, &lv_font_ui_28, 0);
+  lv_obj_set_style_text_color(wifiSetupSsidLabel,
+                              lv_color_hex(themeAccent(UI_ACCENT_BLUE)), 0);
   lv_obj_align(wifiSetupSsidLabel, LV_ALIGN_TOP_MID, 0, 150);
 
   wifiSetupPasswordLabel = lv_label_create(wifiSetupPage);
   lv_obj_set_width(wifiSetupPasswordLabel, 420);
   lv_obj_set_style_text_align(wifiSetupPasswordLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(wifiSetupPasswordLabel, &lv_font_montserrat_22, 0);
-  lv_obj_set_style_text_color(wifiSetupPasswordLabel, lv_color_hex(0xE2E8F0), 0);
+  lv_obj_set_style_text_font(wifiSetupPasswordLabel, &lv_font_ui_22, 0);
+  lv_obj_set_style_text_color(wifiSetupPasswordLabel, themeTextDim(0xE2E8F0), 0);
   lv_obj_align(wifiSetupPasswordLabel, LV_ALIGN_TOP_MID, 0, 202);
 
   lv_obj_t *secondStep = lv_label_create(wifiSetupPage);
-  lv_label_set_text(secondStep, "2. Open this address in your browser");
+  i18nRegister(secondStep, STR_SETUP_STEP2);
   lv_obj_set_width(secondStep, 420);
   lv_obj_set_style_text_align(secondStep, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(secondStep, &lv_font_montserrat_22, 0);
-  lv_obj_set_style_text_color(secondStep, lv_color_hex(0xCBD5E1), 0);
+  lv_obj_set_style_text_font(secondStep, &lv_font_ui_22, 0);
+  lv_obj_set_style_text_color(secondStep, themeTextDim(0xCBD5E1), 0);
   lv_obj_align(secondStep, LV_ALIGN_TOP_MID, 0, 270);
 
   lv_obj_t *address = lv_label_create(wifiSetupPage);
   lv_label_set_text(address, "http://192.168.4.1");
-  lv_obj_set_style_text_font(address, &lv_font_montserrat_28, 0);
-  lv_obj_set_style_text_color(address, lv_color_hex(UI_ACCENT_MINT), 0);
+  lv_obj_set_style_text_font(address, &lv_font_ui_28, 0);
+  lv_obj_set_style_text_color(address, lv_color_hex(themeAccent(UI_ACCENT_MINT)), 0);
   lv_obj_align(address, LV_ALIGN_TOP_MID, 0, 316);
 
   lv_obj_t *note = lv_label_create(wifiSetupPage);
-  lv_label_set_text(note,
-                    "Use the same configuration page as the Wi-Fi web UI.");
+  i18nRegister(note, STR_SETUP_NOTE);
   lv_obj_set_width(note, 400);
   lv_obj_set_style_text_align(note, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(note, &lv_font_montserrat_16, 0);
-  lv_obj_set_style_text_color(note, lv_color_hex(0x94A3B8), 0);
+  lv_obj_set_style_text_font(note, &lv_font_ui_16, 0);
+  lv_obj_set_style_text_color(note, themeTextDim(0x94A3B8), 0);
   lv_obj_align(note, LV_ALIGN_BOTTOM_MID, 0, -50);
 
   updateWifiSetupPage();
@@ -451,6 +504,18 @@ void appPageGestureEvent(lv_event_t *event) {
     if (direction == LV_DIR_TOP) hideMusicPlaylist();
     return;
   }
+  if (audiobookBooklistVisible) {
+    gestureStartX = -1;
+    gestureStartY = -1;
+    if (direction == LV_DIR_TOP) hideAudiobookBooklist();
+    return;
+  }
+  if (radioStationListVisible) {
+    gestureStartX = -1;
+    gestureStartY = -1;
+    if (direction == LV_DIR_TOP) hideRadioStationList();
+    return;
+  }
   if (direction == LV_DIR_LEFT) {
     gestureStartX = -1;
     gestureStartY = -1;
@@ -470,6 +535,8 @@ void appPageGestureEvent(lv_event_t *event) {
     gestureStartY = -1;
     if (calendarPageVisible) hideCalendarPage(true, true);
     else if (musicPageVisible) hideMusicPage(true, true);
+    else if (audiobookPageVisible) hideAudiobookPage(true, true);
+    else if (radioPageVisible) hideRadioPage(true, true);
     else if (weatherInfoPageVisible) hideWeatherInfoPage(true, true);
   }
 }
@@ -502,14 +569,16 @@ lv_obj_t *createClockModeButton(lv_obj_t *parent, int16_t x,
   lv_obj_set_pos(button, x, 94);
   lv_obj_set_size(button, 156, 156);
   lv_obj_set_style_radius(button, 30, 0);
-  lv_obj_set_style_bg_color(button, lv_color_hex(color), 0);
+  lv_obj_set_style_bg_color(button, lv_color_hex(themeAccent(color)), 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(button, 1, 0);
-  lv_obj_set_style_border_color(button, lv_color_white(), 0);
-  lv_obj_set_style_border_opa(button, LV_OPA_20, 0);
+  lv_obj_set_style_border_width(button, themeIsAmber() ? 2 : 1, 0);
+  lv_obj_set_style_border_color(button,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+  lv_obj_set_style_border_opa(button, themeIsAmber() ? LV_OPA_COVER : LV_OPA_20, 0);
   lv_obj_add_event_cb(button, clockModeChoiceEvent, LV_EVENT_CLICKED,
                       reinterpret_cast<void *>(choice));
-  createOfficialTablerIcon(button, icon);
+  createOfficialTablerIcon(button, icon,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
   return button;
 }
 
@@ -518,7 +587,7 @@ void createClockModeSelector() {
   lv_obj_remove_style_all(clockModeSelector);
   lv_obj_set_size(clockModeSelector, APP_MENU_SIZE, APP_MENU_SIZE);
   lv_obj_set_pos(clockModeSelector, 0, 0);
-  lv_obj_set_style_bg_color(clockModeSelector, lv_color_hex(0x080A0F), 0);
+  lv_obj_set_style_bg_color(clockModeSelector, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(clockModeSelector, LV_OPA_90, 0);
   lv_obj_clear_flag(clockModeSelector, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(clockModeSelector, LV_OBJ_FLAG_CLICKABLE);
@@ -527,18 +596,18 @@ void createClockModeSelector() {
   lv_obj_set_size(panel, 420, 310);
   lv_obj_center(panel);
   lv_obj_set_style_radius(panel, 38, 0);
-  lv_obj_set_style_bg_color(panel, lv_color_hex(0x171A22), 0);
+  lv_obj_set_style_bg_color(panel, lv_color_hex(themeSurface(0x0D0D0D)), 0);
   lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(panel, 1, 0);
-  lv_obj_set_style_border_color(panel, lv_color_white(), 0);
-  lv_obj_set_style_border_opa(panel, LV_OPA_20, 0);
+  lv_obj_set_style_border_color(panel, lv_color_hex(themeBorder(0xFFFFFF)), 0);
+  lv_obj_set_style_border_opa(panel, themeIsAmber() ? LV_OPA_COVER : LV_OPA_20, 0);
   lv_obj_set_style_pad_all(panel, 0, 0);
   lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t *title = lv_label_create(panel);
-  lv_label_set_text(title, "Choose Clock Mode");
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
-  lv_obj_set_style_text_color(title, lv_color_white(), 0);
+  i18nRegister(title, STR_CHOOSE_CLOCK_MODE);
+  lv_obj_set_style_text_font(title, &lv_font_ui_28, 0);
+  lv_obj_set_style_text_color(title, themeText(), 0);
   lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 24);
 
   // Symmetric 40 px side margins and a 28 px center gap. The buttons are
@@ -553,9 +622,43 @@ void createClockModeSelector() {
   lv_obj_set_style_bg_opa(close, LV_OPA_TRANSP, 0);
   lv_obj_add_event_cb(close, clockModeChoiceEvent, LV_EVENT_CLICKED,
                       reinterpret_cast<void *>(2));
-  createOfficialTablerIcon(close, &tabler_x);
+  createOfficialTablerIcon(close, &tabler_x, themeIcon());
 
   lv_obj_add_flag(clockModeSelector, LV_OBJ_FLAG_HIDDEN);
+}
+
+void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
+  if (themeIsAmber()) {
+    lv_obj_set_style_bg_color(button, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(button, 2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, lv_color_hex(CRT_AMBER), LV_PART_MAIN);
+    lv_obj_set_style_border_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(CRT_AMBER),
+                              LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
+  } else {
+    lv_obj_set_style_bg_color(button, lv_color_hex(color), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(button, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_border_opa(button, LV_OPA_20, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(button, 18, LV_PART_MAIN);
+    lv_obj_set_style_shadow_opa(button, LV_OPA_20, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0xFFFFFF),
+                              LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
+  }
+  if (lv_obj_get_child_cnt(button)) {
+    lv_obj_t *icon = lv_obj_get_child(button, 0);
+    const lv_color_t iconColor =
+      themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white();
+    // Image tiles use img_recolor; the vector audiobook tile uses line/border
+    // colors. Applying both is safe for either representation.
+    lv_obj_set_style_img_recolor(icon, iconColor, 0);
+    setTablerIconColor(icon, iconColor);
+  }
 }
 
 lv_obj_t *createAppTile(lv_obj_t *parent, AppMenuItem item, uint8_t slot,
@@ -568,20 +671,16 @@ lv_obj_t *createAppTile(lv_obj_t *parent, AppMenuItem item, uint8_t slot,
                  APP_MENU_TILE_TOP + row * (APP_MENU_TILE_SIZE + APP_MENU_TILE_GAP_Y));
   lv_obj_set_size(button, APP_MENU_TILE_SIZE, APP_MENU_TILE_SIZE);
   lv_obj_set_style_radius(button, 38, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(button, lv_color_hex(color), LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_border_width(button, 1, LV_PART_MAIN);
-  lv_obj_set_style_border_color(button, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_set_style_border_opa(button, LV_OPA_20, LV_PART_MAIN);
-  lv_obj_set_style_shadow_width(button, 18, LV_PART_MAIN);
-  lv_obj_set_style_shadow_opa(button, LV_OPA_20, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(button, lv_color_hex(0xFFFFFF),
-                            LV_PART_MAIN | LV_STATE_PRESSED);
-  lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
+  applyAppTileTheme(button, color);
   lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(button, LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_event_cb(button, appMenuItemEvent, LV_EVENT_CLICKED,
                       reinterpret_cast<void *>(static_cast<uintptr_t>(item)));
+  if (appMenuTileCount < APP_MENU_TILE_CAPACITY) {
+    appMenuTileButtons[appMenuTileCount] = button;
+    appMenuTileColors[appMenuTileCount] = color;
+    ++appMenuTileCount;
+  }
   return button;
 }
 
@@ -589,7 +688,8 @@ void createTablerAppIcon(lv_obj_t *button, const lv_img_dsc_t *icon) {
   lv_obj_t *image = lv_img_create(button);
   lv_img_set_src(image, icon);
   lv_obj_center(image);
-  lv_obj_set_style_img_recolor(image, lv_color_white(), 0);
+  lv_obj_set_style_img_recolor(image,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
   lv_obj_set_style_img_recolor_opa(image, LV_OPA_COVER, 0);
   lv_obj_clear_flag(image, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 }
@@ -599,7 +699,7 @@ void createCalendarPage(lv_obj_t *screen) {
   lv_obj_remove_style_all(calendarPage);
   lv_obj_set_pos(calendarPage, 0, 0);
   lv_obj_set_size(calendarPage, SCREEN_WIDTH, SCREEN_HEIGHT);
-  lv_obj_set_style_bg_color(calendarPage, lv_color_hex(0x101114), 0);
+  lv_obj_set_style_bg_color(calendarPage, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(calendarPage, LV_OPA_COVER, 0);
   lv_obj_clear_flag(calendarPage,
                     LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
@@ -610,11 +710,11 @@ void createCalendarPage(lv_obj_t *screen) {
   lv_obj_set_pos(calendarWidget, 0, 0);
   lv_obj_set_size(calendarWidget, SCREEN_WIDTH, SCREEN_HEIGHT);
   lv_obj_set_style_radius(calendarWidget, 0, 0);
-  lv_obj_set_style_bg_color(calendarWidget, lv_color_hex(0x181C24), 0);
+  lv_obj_set_style_bg_color(calendarWidget, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(calendarWidget, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(calendarWidget, 0, 0);
   lv_obj_set_style_pad_all(calendarWidget, 18, 0);
-  lv_obj_set_style_text_color(calendarWidget, lv_color_white(), 0);
+  lv_obj_set_style_text_color(calendarWidget, themeText(), 0);
   lv_obj_clear_flag(calendarWidget,
                     LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_t *header = lv_calendar_header_arrow_create(calendarWidget);
@@ -625,9 +725,11 @@ void createCalendarPage(lv_obj_t *screen) {
   lv_obj_t *nextMonthButton = lv_obj_get_child(header, 2);
   lv_obj_set_size(previousMonthButton, 64, 64);
   lv_obj_set_size(nextMonthButton, 64, 64);
-  lv_obj_set_style_text_font(monthLabel, &lv_font_montserrat_30, 0);
-  lv_obj_set_style_text_font(previousMonthButton, &lv_font_montserrat_30, 0);
-  lv_obj_set_style_text_font(nextMonthButton, &lv_font_montserrat_30, 0);
+  lv_obj_set_style_text_font(monthLabel, &lv_font_ui_30, 0);
+  lv_obj_set_style_text_font(previousMonthButton, &lv_font_ui_30, 0);
+  lv_obj_set_style_text_font(nextMonthButton, &lv_font_ui_30, 0);
+  lv_obj_set_style_text_color(monthLabel, themeText(), 0);
+  applyCalendarLocalization();
   lv_obj_set_style_bg_opa(previousMonthButton, LV_OPA_TRANSP, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(previousMonthButton, LV_OPA_TRANSP,
                           LV_PART_MAIN | LV_STATE_PRESSED);
@@ -638,11 +740,11 @@ void createCalendarPage(lv_obj_t *screen) {
   lv_obj_set_style_shadow_width(nextMonthButton, 0, 0);
   lv_obj_set_style_bg_img_src(previousMonthButton, nullptr, 0);
   lv_obj_set_style_bg_img_src(nextMonthButton, nullptr, 0);
-  createTablerIcon(previousMonthButton, TABLER_ICON_CHEVRON_LEFT, 30);
-  createTablerIcon(nextMonthButton, TABLER_ICON_CHEVRON_RIGHT, 30);
+  createTablerIcon(previousMonthButton, TABLER_ICON_CHEVRON_LEFT, 30, themeIcon());
+  createTablerIcon(nextMonthButton, TABLER_ICON_CHEVRON_RIGHT, 30, themeIcon());
 
   lv_obj_t *dayMatrix = lv_calendar_get_btnmatrix(calendarWidget);
-  lv_obj_set_style_text_font(dayMatrix, &lv_font_montserrat_28, LV_PART_ITEMS);
+  lv_obj_set_style_text_font(dayMatrix, &lv_font_ui_28, LV_PART_ITEMS);
   // The calendar is a viewer, so dates do not need pressed/selected states.
   // Removing their touch redraws prevents many small rotated flushes while an
   // upward gesture crosses cells, which is visible as tearing at 90/270 deg.
@@ -673,7 +775,7 @@ void createAppMenu() {
   lv_obj_remove_style_all(appMenu);
   lv_obj_set_pos(appMenu, 0, 0);
   lv_obj_set_size(appMenu, APP_MENU_SIZE, APP_MENU_SIZE);
-  lv_obj_set_style_bg_color(appMenu, lv_color_hex(0x101114), 0);
+  lv_obj_set_style_bg_color(appMenu, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(appMenu, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(appMenu, 0, 0);
   lv_obj_set_style_pad_all(appMenu, 0, 0);
@@ -681,7 +783,7 @@ void createAppMenu() {
   lv_obj_add_flag(appMenu, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(appMenu, mainUiGestureEvent, LV_EVENT_GESTURE, nullptr);
 
-  for (uint8_t i = 0; i < 2; ++i) {
+  for (uint8_t i = 0; i < 3; ++i) {
     appMenuPages[i] = lv_obj_create(appMenu);
     lv_obj_remove_style_all(appMenuPages[i]);
     lv_obj_set_size(appMenuPages[i], APP_MENU_SIZE, APP_MENU_SIZE);
@@ -712,15 +814,23 @@ void createAppMenu() {
   createTablerAppIcon(alarmButton, &tabler_alarm);
   lv_obj_t *musicButton = createAppTile(
     appMenuPages[1], APP_MENU_MUSIC, 2, UI_ACCENT_VIOLET);
-  lv_obj_set_x(musicButton, (APP_MENU_SIZE - APP_MENU_TILE_SIZE) / 2);
   createTablerAppIcon(musicButton, &tabler_music);
+  lv_obj_t *audiobookButton = createAppTile(
+    appMenuPages[1], APP_MENU_AUDIOBOOK, 3, UI_ACCENT_MINT);
+  createTablerIcon(audiobookButton, TABLER_ICON_AUDIOBOOK, 80,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
 
-  for (uint8_t i = 0; i < 2; ++i) {
+  lv_obj_t *radioButton = createAppTile(
+    appMenuPages[2], APP_MENU_RADIO, 0, UI_ACCENT_MINT);
+  createTablerIcon(radioButton, TABLER_ICON_RADIO, 80,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+
+  for (uint8_t i = 0; i < 3; ++i) {
     appMenuPageDots[i] = lv_obj_create(appMenu);
     lv_obj_remove_style_all(appMenuPageDots[i]);
     lv_obj_set_style_radius(appMenuPageDots[i], LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(appMenuPageDots[i], lv_color_white(), 0);
-    lv_obj_align(appMenuPageDots[i], LV_ALIGN_BOTTOM_MID, i ? 9 : -9, -13);
+    lv_obj_align(appMenuPageDots[i], LV_ALIGN_BOTTOM_MID, (i - 1) * 18, -13);
     lv_obj_clear_flag(appMenuPageDots[i],
                       LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
   }
@@ -731,6 +841,55 @@ void createAppMenu() {
   lv_obj_add_flag(appMenu, LV_OBJ_FLAG_HIDDEN);
   createCalendarPage(screen);
   createMusicPage(screen);
+  createAudiobookPage(screen);
+  createRadioPage(screen);
   createWeatherWallpaperPage(screen);
   createWeatherInfoPage(screen);
+}
+
+// Re-apply the active theme to the launcher, its tiles and the modal pages.
+void refreshAppMenuTheme() {
+  if (!appMenu) return;
+  lv_obj_set_style_bg_color(appMenu, themePageBackground(), 0);
+  for (uint8_t i = 0; i < appMenuTileCount; ++i)
+    applyAppTileTheme(appMenuTileButtons[i], appMenuTileColors[i]);
+  for (uint8_t i = 0; i < 3; ++i) {
+    if (appMenuPageDots[i])
+      lv_obj_set_style_bg_color(appMenuPageDots[i], themeText(), 0);
+  }
+  if (clockModeSelector) {
+    lv_obj_set_style_bg_color(clockModeSelector, lv_color_black(), 0);
+    // Rebuild the two mode keys' colors in place.
+    lv_obj_t *panel = lv_obj_get_child(clockModeSelector, 0);
+    if (panel) {
+      lv_obj_set_style_bg_color(panel, lv_color_hex(themeSurface(0x0D0D0D)), 0);
+      lv_obj_set_style_border_color(panel, lv_color_hex(themeBorder(0xFFFFFF)), 0);
+      lv_obj_set_style_border_opa(panel,
+        themeIsAmber() ? LV_OPA_COVER : LV_OPA_20, 0);
+      const uint32_t childCount = lv_obj_get_child_cnt(panel);
+      for (uint32_t i = 0; i < childCount; ++i) {
+        lv_obj_t *child = lv_obj_get_child(panel, i);
+        // Mode buttons are 156x156; the close key is 42x42 and the title is a
+        // label. Recolor the two large buttons and the close icon.
+        if (lv_obj_get_width(child) == 156) {
+          const bool amber = themeIsAmber();
+          lv_obj_set_style_bg_color(child,
+            amber ? lv_color_black()
+                  : lv_color_hex(i == 1 ? UI_ACCENT_BLUE : UI_ACCENT_MINT), 0);
+          lv_obj_set_style_border_width(child, amber ? 2 : 1, 0);
+          lv_obj_set_style_border_color(child,
+            amber ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+          lv_obj_set_style_border_opa(child, amber ? LV_OPA_COVER : LV_OPA_20, 0);
+          if (lv_obj_get_child_cnt(child))
+            lv_obj_set_style_img_recolor(lv_obj_get_child(child, 0),
+              amber ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+        }
+      }
+    }
+  }
+  if (wifiSetupPage) {
+    lv_obj_set_style_bg_color(wifiSetupPage, themePageBackground(), 0);
+    lv_obj_set_style_text_color(wifiSetupSsidLabel,
+      lv_color_hex(themeAccent(UI_ACCENT_BLUE)), 0);
+  }
 }

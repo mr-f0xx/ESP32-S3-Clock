@@ -56,6 +56,14 @@ lv_obj_t * lv_calendar_header_arrow_create(lv_obj_t * parent)
     return obj;
 }
 
+void lv_calendar_header_arrow_set_month_names(const char * month_names[])
+{
+    if(month_names == NULL) return;
+    for(int i = 0; i < 12; i++) {
+        if(month_names[i] != NULL) month_names_def[i] = month_names[i];
+    }
+}
+
 /**********************
  *  STATIC FUNCTIONS
  **********************/

@@ -17,8 +17,12 @@
 #include <mbedtls/ssl.h>
 #include "esp_sntp.h"
 #include <AudioFileSourceSD.h>
+#include <AudioFileSourceHTTPStream.h>
+#include <AudioFileSourceICYStream.h>
+#include <AudioFileSourceBuffer.h>
 #include <AudioGenerator.h>
 #include <AudioGeneratorMP3.h>
+#include <AudioGeneratorAAC.h>
 #include <AudioGeneratorWAV.h>
 #include <AudioOutputI2S.h>
 #include <HTTPClient.h>
@@ -171,8 +175,8 @@ lv_obj_t *addressLabel = nullptr;
 lv_obj_t *settingsButton = nullptr;
 lv_obj_t *controlPanel = nullptr;
 lv_obj_t *appMenu = nullptr;
-lv_obj_t *appMenuPages[2] = {};
-lv_obj_t *appMenuPageDots[2] = {};
+lv_obj_t *appMenuPages[3] = {};
+lv_obj_t *appMenuPageDots[3] = {};
 lv_obj_t *wifiSetupPage = nullptr;
 lv_obj_t *wifiSetupSsidLabel = nullptr;
 lv_obj_t *wifiSetupPasswordLabel = nullptr;
@@ -195,6 +199,30 @@ lv_obj_t *musicPlayIcon = nullptr;
 lv_obj_t *musicPauseIcon = nullptr;
 lv_obj_t *musicPlaylistPanel = nullptr;
 lv_obj_t *musicPlaylistList = nullptr;
+lv_obj_t *audiobookPage = nullptr;
+lv_obj_t *audiobookTitleLabel = nullptr;
+lv_obj_t *audiobookStatusLabel = nullptr;
+lv_obj_t *audiobookCountLabel = nullptr;
+lv_obj_t *audiobookTimeLabel = nullptr;
+lv_obj_t *audiobookPlayIcon = nullptr;
+lv_obj_t *audiobookPauseIcon = nullptr;
+lv_obj_t *audiobookBooklistPanel = nullptr;
+lv_obj_t *audiobookBooklistList = nullptr;
+lv_obj_t *audiobookProgressBar = nullptr;
+lv_obj_t *radioPage = nullptr;
+lv_obj_t *radioStationLabel = nullptr;
+lv_obj_t *radioNowPlayingLabel = nullptr;
+lv_obj_t *radioTitleLabel = nullptr;
+lv_obj_t *radioStatusLabel = nullptr;
+lv_obj_t *radioPlayIcon = nullptr;
+lv_obj_t *radioPauseIcon = nullptr;
+lv_obj_t *radioStationListPanel = nullptr;
+lv_obj_t *radioStationListList = nullptr;
+lv_obj_t *radioHintLabel = nullptr;
+lv_obj_t *languageControlButton = nullptr;
+lv_obj_t *languageControlLabel = nullptr;
+lv_obj_t *themeControlButton = nullptr;
+lv_obj_t *themeControlLabel = nullptr;
 lv_obj_t *wifiControlButton = nullptr;
 lv_obj_t *bluetoothControlButton = nullptr;
 lv_obj_t *wifiControlStatus = nullptr;
@@ -287,6 +315,14 @@ bool musicPageVisible = false;
 bool musicPageShowRequested = false;
 bool musicPageHideRequested = false;
 bool musicPlaylistVisible = false;
+bool audiobookPageVisible = false;
+bool audiobookPageShowRequested = false;
+bool audiobookPageHideRequested = false;
+bool audiobookBooklistVisible = false;
+bool radioPageVisible = false;
+bool radioPageShowRequested = false;
+bool radioPageHideRequested = false;
+bool radioStationListVisible = false;
 bool albumAutoSwitchEnabled = false;
 bool weatherAutoSwitchEnabled = true;
 bool weatherWallpaperFollowEnabled = true;
@@ -318,6 +354,11 @@ uint16_t weatherSwitchMinutes = DEFAULT_WEATHER_SWITCH_MINUTES;
 uint8_t clockFontIndex = CLOCK_FONT_MONTSERRAT;
 uint8_t pendingClockFontIndex = CLOCK_FONT_MONTSERRAT;
 bool clockFontChangeRequested = false;
+// UI language (0 = English, 1 = French) and theme (0 = AMOLED black,
+// 1 = CRT amber). Named constants live in clock_i18n.inc / clock_theme.inc.
+uint8_t uiLanguage = 0;
+uint8_t uiTheme = 0;
+bool uiAppearanceChangeRequested = false;
 String uploadError;
 File uploadFile;
 size_t uploadBytes = 0;
@@ -363,6 +404,7 @@ void createAppMenu();
 void showAppMenu(bool fade = true);
 void hideAppMenu(bool fade = true);
 void updateWifiSetupPage();
+void updateCalendarToday();
 void processAppMenuTransition();
 void createAlarmPage(lv_obj_t *screen);
 void showAlarmPage(bool fade = true);
@@ -398,6 +440,36 @@ void hideMusicPlaylist();
 void suspendMusicForLowPower(bool sdSafeToUnmount = true);
 bool pauseMusicForControlPanel();
 void resumeMusicAfterControlPanel(bool wasPlaying);
+void createAudiobookPage(lv_obj_t *screen);
+void showAudiobookPage(bool fade = true);
+void hideAudiobookPage(bool fade = true, bool returnToMenu = true);
+void processAudiobookPageTransition();
+void serviceAudiobookPlayback();
+void selectAdjacentAudiobook(int8_t direction);
+void hideAudiobookBooklist();
+void suspendAudiobookForLowPower();
+bool pauseAudiobookForControlPanel();
+void resumeAudiobookAfterControlPanel(bool wasPlaying);
+void stopAudiobookPlayback();
+void updateAudiobookPageText();
+void createRadioPage(lv_obj_t *screen);
+void showRadioPage(bool fade = true);
+void hideRadioPage(bool fade = true, bool returnToMenu = true);
+void processRadioPageTransition();
+void serviceRadioPlayback();
+void selectAdjacentRadioStation(int8_t direction);
+void hideRadioStationList();
+void suspendRadioForLowPower();
+bool pauseRadioForControlPanel();
+void resumeRadioAfterControlPanel(bool wasPlaying);
+void stopRadioPlayback();
+void updateRadioPageText();
+void updateMusicPageText();
+void initUiFonts();
+void applyUiAppearance();
+void requestUiAppearanceChange();
+void setUiLanguage(uint8_t language, bool persist);
+void setUiTheme(uint8_t theme, bool persist);
 void createWeatherWallpaperPage(lv_obj_t *screen);
 void showWeatherWallpaperPage(bool fade = true);
 void showVideoPlayerPage(bool fade = true);
@@ -440,6 +512,8 @@ void serviceAlbumAutoSwitch();
 
 
 #include "clock_tabler_icons.inc"
+#include "clock_i18n.inc"
+#include "clock_theme.inc"
 #include "clock_hardware.inc"
 #include "clock_ui.inc"
 #include "clock_time.inc"
@@ -447,6 +521,8 @@ void serviceAlbumAutoSwitch();
 #include "clock_app_menu.inc"
 #include "clock_alarm.inc"
 #include "clock_music.inc"
+#include "clock_audiobook.inc"
+#include "clock_radio.inc"
 #include "clock_weather.inc"
 #include "clock_images.inc"
 #include "clock_power.inc"
@@ -520,6 +596,8 @@ void loop() {
   processAppMenuTransition();
   processAlarmPageTransition();
   processMusicPageTransition();
+  processAudiobookPageTransition();
+  processRadioPageTransition();
   processWeatherWallpaperTransition();
   processWeatherInfoPageTransition();
   processCalendarPageActions();
@@ -528,6 +606,8 @@ void loop() {
   serviceAlbumAutoSwitch();
   processAlbumImageStep();
   serviceMusicPlayback();
+  serviceAudiobookPlayback();
+  serviceRadioPlayback();
   serviceWeatherWallpaper();
   serviceWeatherInfoPage();
   serviceAlarms();
@@ -565,6 +645,14 @@ void loop() {
       endScreenFade(activeBrightness);
     }
   }
+  if (uiAppearanceChangeRequested && !screenFadeTransitionActive) {
+    uiAppearanceChangeRequested = false;
+    beginScreenFade(activeBrightness);
+    applyUiAppearance();
+    lv_obj_invalidate(lv_scr_act());
+    lv_refr_now(nullptr);
+    endScreenFade(activeBrightness);
+  }
 
   if (millis() - lastClockUpdate >= 1000) {
     lastClockUpdate = millis();
@@ -584,9 +672,13 @@ void loop() {
   processAppMenuTransition();
   processAlarmPageTransition();
   processMusicPageTransition();
+  processAudiobookPageTransition();
+  processRadioPageTransition();
   processWeatherWallpaperTransition();
   processWeatherInfoPageTransition();
   serviceMusicPlayback();
+  serviceAudiobookPlayback();
+  serviceRadioPlayback();
   // The standalone 09 player does not run LVGL for every decoded frame. Keep
   // its 10 ms UI cadence in weather mode so the main loop can immediately
   // begin the next JPEG; all other applications retain the original cadence.
@@ -601,6 +693,8 @@ void loop() {
   processControlPanelActions();
   serviceAlarmSettingsSave();
   serviceMusicPlayback();
+  serviceAudiobookPlayback();
+  serviceRadioPlayback();
   checkAutoSleep();
   if (weatherPageVisible) taskYIELD();
   else delay(5);

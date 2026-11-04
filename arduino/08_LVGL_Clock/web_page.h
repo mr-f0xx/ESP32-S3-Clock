@@ -2,7 +2,7 @@
 
 static const char CLOCK_WEB_PAGE[] PROGMEM = R"HTML(
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -26,110 +26,156 @@ static const char CLOCK_WEB_PAGE[] PROGMEM = R"HTML(
 </head>
 <body>
 <main>
-  <header><h1>AMOLED Clock</h1><div id="state" class="state">正在连接设备…</div></header>
+  <header><h1>AMOLED Clock</h1><div id="state" class="state"></div></header>
 
   <section class="card">
-    <h2>背景图片</h2>
+    <h2 data-i18n="appearance">Appearance</h2>
+    <div class="row">
+      <div>
+        <label for="deviceLang" data-i18n="device_language">Device language</label>
+        <select id="deviceLang">
+          <option value="0">English</option>
+          <option value="1">Français</option>
+        </select>
+      </div>
+      <div>
+        <label for="deviceTheme" data-i18n="theme">Theme</label>
+        <select id="deviceTheme">
+          <option value="0" data-i18n="theme_black">AMOLED Black</option>
+          <option value="1" data-i18n="theme_amber">CRT Amber</option>
+        </select>
+      </div>
+    </div>
+    <label for="pageLang" data-i18n="page_language">Web page language</label>
+    <select id="pageLang">
+      <option value="en">English</option>
+      <option value="fr">Français</option>
+      <option value="zh">中文</option>
+    </select>
+    <p class="hint" data-i18n="appearance_hint">The device screen supports English and French. The web page can also use Chinese.</p>
+    <div id="appearanceMsg" class="msg"></div>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="background_image">Background image</h2>
     <input id="file" type="file" accept="image/*">
     <div class="row modes" style="margin-top:10px">
-      <button type="button" data-mode="cover" class="active">裁剪填满</button>
-      <button type="button" data-mode="contain">完整 / 黑边</button>
+      <button type="button" data-mode="cover" class="active" data-i18n="mode_cover">Crop to fill</button>
+      <button type="button" data-mode="contain" data-i18n="mode_contain">Fit / black bars</button>
     </div>
     <div id="crop" class="crop"><canvas id="preview" width="480" height="480"></canvas></div>
-    <div class="zoomline"><span>缩放</span><input id="zoom" type="range" min="100" max="400" value="100"><output id="zoomValue">100%</output></div>
-    <button id="reset" class="ghost" type="button">复位位置</button>
-    <p class="hint">拖动图片调整位置。方框内就是最终的 480×480 画面；“完整/黑边”会用黑色补齐空白。</p>
+    <div class="zoomline"><span data-i18n="zoom">Zoom</span><input id="zoom" type="range" min="100" max="400" value="100"><output id="zoomValue">100%</output></div>
+    <button id="reset" class="ghost" type="button" data-i18n="reset_position">Reset position</button>
+    <p class="hint" data-i18n="crop_hint">Drag the image to position it. The square is the final 480×480 picture; "Fit" pads the empty area with black.</p>
     <progress id="progress" value="0" max="100"></progress>
     <div class="row">
-      <button id="upload" type="button" disabled>上传图片</button>
-      <button id="clear" class="danger" type="button">清空相册</button>
+      <button id="upload" type="button" disabled data-i18n="upload">Upload image</button>
+      <button id="clear" class="danger" type="button" data-i18n="clear_album">Clear album</button>
     </div>
     <div id="msg" class="msg"></div>
   </section>
 
   <section class="card">
-    <h2>背景自动切换</h2>
+    <h2 data-i18n="auto_switch">Automatic switching</h2>
     <div class="row">
       <div>
-        <label class="check"><input id="albumAuto" type="checkbox"><span>相册自动切换</span></label>
-        <label for="albumMinutes">相册间隔（分钟）</label>
+        <label class="check"><input id="albumAuto" type="checkbox"><span data-i18n="album_auto">Album auto-switch</span></label>
+        <label for="albumMinutes" data-i18n="album_interval">Album interval (minutes)</label>
         <input id="albumMinutes" type="number" min="1" max="1440" value="30">
-        <label for="albumLimit">相册图片上限（1–20）</label>
+        <label for="albumLimit" data-i18n="album_limit">Album image limit (1–20)</label>
         <input id="albumLimit" type="number" min="1" max="20" value="20">
-        <p id="albumState" class="hint">当前 0 张，最多保存 20 张。</p>
+        <p id="albumState" class="hint"></p>
       </div>
       <div>
-        <label class="check"><input id="weatherFollow" type="checkbox" checked><span>壁纸跟随天气</span></label>
-        <label class="check"><input id="weatherAuto" type="checkbox"><span>天气壁纸自动切换</span></label>
-        <label for="weatherMinutes">天气间隔（分钟）</label>
+        <label class="check"><input id="weatherFollow" type="checkbox" checked><span data-i18n="weather_follow">Wallpaper follows weather</span></label>
+        <label class="check"><input id="weatherAuto" type="checkbox"><span data-i18n="weather_auto">Weather wallpaper auto-switch</span></label>
+        <label for="weatherMinutes" data-i18n="weather_interval">Weather interval (minutes)</label>
         <input id="weatherMinutes" type="number" min="1" max="1440" value="30">
       </div>
     </div>
-    <p class="hint">“壁纸跟随天气”控制天气和昼夜变化是否切换场景；关闭后会记住手动选择的壁纸。两组定时切换互相独立。</p>
-    <button id="saveBackgroundSwitch" type="button">保存自动切换设置</button>
+    <p class="hint" data-i18n="switch_hint">"Follows weather" controls whether weather and day/night changes switch the scene; turning it off remembers a manual choice. The two timers are independent.</p>
+    <button id="saveBackgroundSwitch" type="button" data-i18n="save_switch">Save switching settings</button>
     <div id="backgroundSwitchMsg" class="msg"></div>
   </section>
 
   <section class="card">
-    <h2>天气服务</h2>
+    <h2 data-i18n="weather_service">Weather service</h2>
     <label for="weatherHost">QWeather API Host</label>
     <input id="weatherHost" maxlength="96" placeholder="abc123.re.qweatherapi.com">
     <label for="weatherKey">API Key</label>
     <input id="weatherKey" type="password" maxlength="128" autocomplete="off">
-    <label class="check"><input id="weatherAutoLocation" type="checkbox"><span>使用公网 IP 自动定位</span></label>
+    <label class="check"><input id="weatherAutoLocation" type="checkbox"><span data-i18n="auto_location">Locate automatically via public IP</span></label>
     <div class="row">
-      <div><label for="weatherLatitude">纬度</label><input id="weatherLatitude" inputmode="decimal" placeholder="39.92"></div>
-      <div><label for="weatherLongitude">经度</label><input id="weatherLongitude" inputmode="decimal" placeholder="116.41"></div>
+      <div><label for="weatherLatitude" data-i18n="latitude">Latitude</label><input id="weatherLatitude" inputmode="decimal" placeholder="48.56"></div>
+      <div><label for="weatherLongitude" data-i18n="longitude">Longitude</label><input id="weatherLongitude" inputmode="decimal" placeholder="-3.15"></div>
     </div>
-    <p id="weatherLocationState" class="hint">自动定位时，经纬度作为定位失败后的后备地址。</p>
-    <p class="hint">API Host 不要填写 https://。设备将获取当前天气和三日预报。</p>
-    <button id="saveWeather" type="button">保存天气配置</button>
+    <p id="weatherLocationState" class="hint"></p>
+    <p class="hint" data-i18n="weather_hint">Do not include https:// in the API Host. The device fetches current weather and a 3-day forecast.</p>
+    <button id="saveWeather" type="button" data-i18n="save_weather">Save weather configuration</button>
     <div id="weatherMsg" class="msg"></div>
   </section>
 
   <section class="card">
-    <h2>时间字体</h2>
+    <h2 data-i18n="time_font">Time font</h2>
     <select id="clockFont">
-      <option value="0">Montserrat（默认）</option>
+      <option value="0" data-i18n="font_montserrat">Montserrat (default)</option>
       <option value="1">Kameron</option>
       <option value="2">Silkscreen</option>
       <option value="3">DotGothic16</option>
     </select>
-    <p class="hint">仅更改主页面和待机页面的时间字体，字号均为 48px。</p>
+    <p class="hint" data-i18n="font_hint">Only changes the time font on the main and standby pages; the size stays 48px.</p>
     <div id="fontMsg" class="msg"></div>
   </section>
 
   <section class="card">
-    <h2>休眠设置</h2>
-    <label class="check"><input id="idleEnabled" type="checkbox"><span>启用无操作自动休眠</span></label>
-    <label class="check"><input id="sleepShowTime" type="checkbox" checked><span>休眠时显示时间</span></label>
-    <label for="idleMinutes">无操作后休眠（分钟）</label>
+    <h2 data-i18n="sleep_settings">Sleep settings</h2>
+    <label class="check"><input id="idleEnabled" type="checkbox"><span data-i18n="idle_enabled">Enable idle auto-sleep</span></label>
+    <label class="check"><input id="sleepShowTime" type="checkbox" checked><span data-i18n="sleep_show_time">Show time while asleep</span></label>
+    <label for="idleMinutes" data-i18n="idle_minutes">Sleep after idle (minutes)</label>
     <input id="idleMinutes" type="number" min="1" max="1440" step="1" value="15" inputmode="numeric">
     <div class="row">
-      <div><label for="nightStart">夜间开始</label><input id="nightStart" type="time" value="00:00"></div>
-      <div><label for="nightEnd">夜间结束</label><input id="nightEnd" type="time" value="08:00"></div>
+      <div><label for="nightStart" data-i18n="night_start">Night start</label><input id="nightStart" type="time" value="00:00"></div>
+      <div><label for="nightEnd" data-i18n="night_end">Night end</label><input id="nightEnd" type="time" value="08:00"></div>
     </div>
-    <p class="hint">关闭“休眠时显示时间”后，AMOLED 会进入硬件睡眠；无闹钟时 ESP32 也不再按分钟定时唤醒，可进一步降低待机功耗。</p>
-    <button id="saveSleep" type="button">保存休眠设置</button>
+    <p class="hint" data-i18n="sleep_hint">With "Show time while asleep" off, the AMOLED enters hardware sleep; without alarms the ESP32 also stops waking every minute, further reducing standby power.</p>
+    <button id="saveSleep" type="button" data-i18n="save_sleep">Save sleep settings</button>
     <div id="sleepMsg" class="msg"></div>
   </section>
 
   <details class="card">
-    <summary>Wi-Fi 与时区</summary>
+    <summary data-i18n="wifi_timezone">Wi-Fi &amp; time zone</summary>
     <form method="post" action="/save">
-      <label for="ssid">Wi-Fi 名称</label>
-      <input id="ssid" name="ssid" maxlength="32" required autocomplete="off" placeholder="仅支持 2.4GHz">
-      <label for="password">Wi-Fi 密码</label>
+      <label for="ssid" data-i18n="wifi_name">Wi-Fi name</label>
+      <input id="ssid" name="ssid" maxlength="32" required autocomplete="off" data-i18n-placeholder="wifi_placeholder" placeholder="2.4GHz only">
+      <label for="password" data-i18n="wifi_password">Wi-Fi password</label>
       <input id="password" name="password" type="password" maxlength="64" autocomplete="new-password">
-      <label for="tz">POSIX 时区</label>
-      <input id="tz" name="tz" maxlength="63" value="CST-8" required>
-      <p class="hint">中国大陆使用 CST-8。保存后设备将重新启动。</p>
-      <button type="submit">保存并重启</button>
+      <label for="tz" data-i18n="posix_tz">POSIX time zone</label>
+      <input id="tz" name="tz" maxlength="63" value="CET-1CEST,M3.5.0,M10.5.0/3" required>
+      <p class="hint" data-i18n="tz_hint">Example: CET-1CEST,M3.5.0,M10.5.0/3 for France. The device restarts after saving.</p>
+      <button type="submit" data-i18n="save_reboot">Save and restart</button>
     </form>
   </details>
 </main>
 
 <script>
+const I18N={
+ en:{appearance:"Appearance",device_language:"Device language",theme:"Theme",theme_black:"AMOLED Black",theme_amber:"CRT Amber",page_language:"Web page language",appearance_hint:"The device screen supports English and French. The web page can also use Chinese.",background_image:"Background image",mode_cover:"Crop to fill",mode_contain:"Fit / black bars",zoom:"Zoom",reset_position:"Reset position",crop_hint:"Drag the image to position it. The square is the final 480×480 picture; \"Fit\" pads the empty area with black.",upload:"Upload image",clear_album:"Clear album",auto_switch:"Automatic switching",album_auto:"Album auto-switch",album_interval:"Album interval (minutes)",album_limit:"Album image limit (1–20)",weather_follow:"Wallpaper follows weather",weather_auto:"Weather wallpaper auto-switch",weather_interval:"Weather interval (minutes)",switch_hint:"\"Follows weather\" controls whether weather and day/night changes switch the scene; turning it off remembers a manual choice. The two timers are independent.",save_switch:"Save switching settings",weather_service:"Weather service",auto_location:"Locate automatically via public IP",latitude:"Latitude",longitude:"Longitude",weather_hint:"Do not include https:// in the API Host. The device fetches current weather and a 3-day forecast.",save_weather:"Save weather configuration",time_font:"Time font",font_montserrat:"Montserrat (default)",font_hint:"Only changes the time font on the main and standby pages; the size stays 48px.",sleep_settings:"Sleep settings",idle_enabled:"Enable idle auto-sleep",sleep_show_time:"Show time while asleep",idle_minutes:"Sleep after idle (minutes)",night_start:"Night start",night_end:"Night end",sleep_hint:"With \"Show time while asleep\" off, the AMOLED enters hardware sleep; without alarms the ESP32 also stops waking every minute, further reducing standby power.",save_sleep:"Save sleep settings",wifi_timezone:"Wi-Fi & time zone",wifi_name:"Wi-Fi name",wifi_placeholder:"2.4GHz only",wifi_password:"Wi-Fi password",posix_tz:"POSIX time zone",tz_hint:"Example: CET-1CEST,M3.5.0,M10.5.0/3 for France. The device restarts after saving.",save_reboot:"Save and restart",connecting:"Connecting to device…",reading_image:"Reading image…",drag_to_upload:"Drag or zoom, then upload",cannot_read:"Cannot read image",decode_failed:"Image decode failed",converting:"Converting and uploading…",upload_success:"Uploaded; the screen will refresh shortly",upload_failed:"Upload failed: ",upload_interrupted:"Upload connection interrupted",confirm_clear:"Clear all album images on the device? This cannot be undone.",delete_failed:"Delete failed: connection interrupted",switching_font:"Switching font…",font_failed:"Font switch failed",saving:"Saving…",save_failed:"Save failed",device_unresponsive:"Device is not responding",wifi_disconnected:"Wi-Fi not connected",album_state_fmt:"{0} images now; limit {1}, device max {2}.",auto_loc_enabled:"Auto-location enabled; manual coordinates are the fallback.",auto_loc_disabled:"Auto-location off; manual coordinates will be used.",current_location:"Located: ",appearance_saved:"Appearance saved",appearance_failed:"Appearance save failed"},
+ fr:{appearance:"Apparence",device_language:"Langue de l'appareil",theme:"Thème",theme_black:"Noir AMOLED",theme_amber:"Ambre CRT",page_language:"Langue de la page web",appearance_hint:"L'écran de l'appareil prend en charge l'anglais et le français. La page web peut aussi utiliser le chinois.",background_image:"Image de fond",mode_cover:"Recadrer pour remplir",mode_contain:"Ajuster / bandes noires",zoom:"Zoom",reset_position:"Réinitialiser la position",crop_hint:"Faites glisser l'image pour la positionner. Le carré est l'image finale 480×480 ; « Ajuster » complète le vide avec du noir.",upload:"Téléverser l'image",clear_album:"Vider l'album",auto_switch:"Changement automatique",album_auto:"Changement auto de l'album",album_interval:"Intervalle de l'album (minutes)",album_limit:"Limite d'images de l'album (1–20)",weather_follow:"Le fond suit la météo",weather_auto:"Changement auto du fond météo",weather_interval:"Intervalle météo (minutes)",switch_hint:"« Suit la météo » détermine si la météo et le jour/nuit changent la scène ; le désactiver mémorise un choix manuel. Les deux minuteries sont indépendantes.",save_switch:"Enregistrer le changement auto",weather_service:"Service météo",auto_location:"Localisation automatique via IP publique",latitude:"Latitude",longitude:"Longitude",weather_hint:"N'incluez pas https:// dans l'API Host. L'appareil récupère la météo actuelle et les prévisions sur 3 jours.",save_weather:"Enregistrer la configuration météo",time_font:"Police de l'heure",font_montserrat:"Montserrat (défaut)",font_hint:"Ne change que la police de l'heure sur les pages principale et veille ; la taille reste 48px.",sleep_settings:"Réglages de veille",idle_enabled:"Activer la veille automatique",sleep_show_time:"Afficher l'heure en veille",idle_minutes:"Veille après inactivité (minutes)",night_start:"Début de nuit",night_end:"Fin de nuit",sleep_hint:"Avec « Afficher l'heure en veille » désactivé, l'AMOLED passe en veille matérielle ; sans alarme, l'ESP32 cesse aussi de se réveiller chaque minute, réduisant encore la consommation.",save_sleep:"Enregistrer la veille",wifi_timezone:"Wi-Fi et fuseau horaire",wifi_name:"Nom du Wi-Fi",wifi_placeholder:"2,4 GHz uniquement",wifi_password:"Mot de passe Wi-Fi",posix_tz:"Fuseau horaire POSIX",tz_hint:"Exemple : CET-1CEST,M3.5.0,M10.5.0/3 pour la France. L'appareil redémarre après l'enregistrement.",save_reboot:"Enregistrer et redémarrer",connecting:"Connexion à l'appareil…",reading_image:"Lecture de l'image…",drag_to_upload:"Glissez ou zoomez, puis téléversez",cannot_read:"Impossible de lire l'image",decode_failed:"Échec du décodage de l'image",converting:"Conversion et téléversement…",upload_success:"Téléversé ; l'écran va se rafraîchir",upload_failed:"Échec du téléversement : ",upload_interrupted:"Connexion de téléversement interrompue",confirm_clear:"Vider toutes les images de l'album sur l'appareil ? Action irréversible.",delete_failed:"Échec de la suppression : connexion interrompue",switching_font:"Changement de police…",font_failed:"Échec du changement de police",saving:"Enregistrement…",save_failed:"Échec de l'enregistrement",device_unresponsive:"L'appareil ne répond pas",wifi_disconnected:"Wi-Fi non connecté",album_state_fmt:"{0} images actuellement ; limite {1}, max appareil {2}.",auto_loc_enabled:"Localisation auto activée ; les coordonnées manuelles servent de secours.",auto_loc_disabled:"Localisation auto désactivée ; les coordonnées manuelles seront utilisées.",current_location:"Localisé : ",appearance_saved:"Apparence enregistrée",appearance_failed:"Échec de l'enregistrement de l'apparence"},
+ zh:{appearance:"外观",device_language:"设备语言",theme:"主题",theme_black:"AMOLED 黑",theme_amber:"CRT 琥珀",page_language:"网页语言",appearance_hint:"设备屏幕支持英语和法语。网页还可以使用中文。",background_image:"背景图片",mode_cover:"裁剪填满",mode_contain:"完整 / 黑边",zoom:"缩放",reset_position:"复位位置",crop_hint:"拖动图片调整位置。方框内就是最终的 480×480 画面；“完整/黑边”会用黑色补齐空白。",upload:"上传图片",clear_album:"清空相册",auto_switch:"背景自动切换",album_auto:"相册自动切换",album_interval:"相册间隔（分钟）",album_limit:"相册图片上限（1–20）",weather_follow:"壁纸跟随天气",weather_auto:"天气壁纸自动切换",weather_interval:"天气间隔（分钟）",switch_hint:"“壁纸跟随天气”控制天气和昼夜变化是否切换场景；关闭后会记住手动选择的壁纸。两组定时切换互相独立。",save_switch:"保存自动切换设置",weather_service:"天气服务",auto_location:"使用公网 IP 自动定位",latitude:"纬度",longitude:"经度",weather_hint:"API Host 不要填写 https://。设备将获取当前天气和三日预报。",save_weather:"保存天气配置",time_font:"时间字体",font_montserrat:"Montserrat（默认）",font_hint:"仅更改主页面和待机页面的时间字体，字号均为 48px。",sleep_settings:"休眠设置",idle_enabled:"启用无操作自动休眠",sleep_show_time:"休眠时显示时间",idle_minutes:"无操作后休眠（分钟）",night_start:"夜间开始",night_end:"夜间结束",sleep_hint:"关闭“休眠时显示时间”后，AMOLED 会进入硬件睡眠；无闹钟时 ESP32 也不再按分钟定时唤醒，可进一步降低待机功耗。",save_sleep:"保存休眠设置",wifi_timezone:"Wi-Fi 与时区",wifi_name:"Wi-Fi 名称",wifi_placeholder:"仅支持 2.4GHz",wifi_password:"Wi-Fi 密码",posix_tz:"POSIX 时区",tz_hint:"中国大陆使用 CST-8。保存后设备将重新启动。",save_reboot:"保存并重启",connecting:"正在连接设备…",reading_image:"正在读取图片…",drag_to_upload:"拖动或缩放后上传",cannot_read:"无法读取图片",decode_failed:"图片解码失败",converting:"正在转换并上传…",upload_success:"上传成功，屏幕即将刷新",upload_failed:"上传失败：",upload_interrupted:"上传连接中断",confirm_clear:"确定清空设备中的全部相册图片？此操作不可撤销。",delete_failed:"删除失败：连接中断",switching_font:"正在切换字体…",font_failed:"字体切换失败",saving:"正在保存…",save_failed:"保存失败",device_unresponsive:"设备暂时无响应",wifi_disconnected:"Wi-Fi 未连接",album_state_fmt:"当前 {0} 张；当前上限 {1} 张，设备最高 {2} 张。",auto_loc_enabled:"自动定位已启用；手动坐标将作为后备。",auto_loc_disabled:"自动定位已关闭；将使用手动经纬度。",current_location:"当前定位：",appearance_saved:"外观已保存",appearance_failed:"外观保存失败"}
+};
+let webLang=localStorage.getItem('clockWebLang');
+let deviceLang=0;
+function effLang(){return webLang||(deviceLang===1?'fr':'en')}
+function t(key){const l=effLang();return (I18N[l]&&I18N[l][key])||I18N.en[key]||key}
+function fmt(key,...args){let s=t(key);args.forEach((a,i)=>{s=s.replace('{'+i+'}',a)});return s}
+function applyI18n(){
+  document.documentElement.lang=effLang()==='zh'?'zh-CN':effLang();
+  document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=t(el.dataset.i18n)});
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{el.placeholder=t(el.dataset.i18nPlaceholder)});
+  $('#pageLang').value=effLang();
+  syncSettingState();
+}
+
 const $=s=>document.querySelector(s);
 const canvas=$('#preview'),ctx=canvas.getContext('2d',{alpha:false,willReadFrequently:true});
 const fileInput=$('#file'),zoomInput=$('#zoom'),zoomValue=$('#zoomValue');
@@ -139,6 +185,7 @@ const idleEnabled=$('#idleEnabled'),sleepShowTime=$('#sleepShowTime'),idleMinute
 const albumAuto=$('#albumAuto'),albumMinutes=$('#albumMinutes'),albumLimit=$('#albumLimit'),albumState=$('#albumState'),weatherFollow=$('#weatherFollow'),weatherAuto=$('#weatherAuto'),weatherMinutes=$('#weatherMinutes');
 const weatherHost=$('#weatherHost'),weatherKey=$('#weatherKey'),weatherAutoLocation=$('#weatherAutoLocation');
 const weatherLatitude=$('#weatherLatitude'),weatherLongitude=$('#weatherLongitude'),weatherLocationState=$('#weatherLocationState');
+const deviceLangSelect=$('#deviceLang'),deviceThemeSelect=$('#deviceTheme'),pageLangSelect=$('#pageLang'),appearanceMsg=$('#appearanceMsg');
 let source=null,mode='cover',zoom=1,offsetX=0,offsetY=0,drag=null;
 
 async function decodeImage(file){
@@ -148,7 +195,7 @@ async function decodeImage(file){
   }
   const url=URL.createObjectURL(file);
   const image=new Image();
-  await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('图片解码失败'));image.src=url});
+  await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error(t('decode_failed')));image.src=url});
   return{image,width:image.naturalWidth,height:image.naturalHeight,close:()=>URL.revokeObjectURL(url)};
 }
 
@@ -184,9 +231,9 @@ function resetView(){zoom=1;offsetX=0;offsetY=0;zoomInput.value=100;zoomValue.va
 
 fileInput.addEventListener('change',async()=>{
   const file=fileInput.files[0];if(!file)return;
-  msg.textContent='正在读取图片…';uploadButton.disabled=true;
-  try{if(source)source.close();source=await decodeImage(file);resetView();uploadButton.disabled=false;msg.textContent='拖动或缩放后上传';}
-  catch(e){source=null;msg.textContent=e.message||'无法读取图片'}
+  msg.textContent=t('reading_image');uploadButton.disabled=true;
+  try{if(source)source.close();source=await decodeImage(file);resetView();uploadButton.disabled=false;msg.textContent=t('drag_to_upload');}
+  catch(e){source=null;msg.textContent=e.message||t('cannot_read')}
 });
 
 document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>{
@@ -211,69 +258,84 @@ function toRgb565(){
 
 uploadButton.addEventListener('click',()=>{
   if(!source)return;
-  msg.textContent='正在转换并上传…';progress.value=0;uploadButton.disabled=true;
+  msg.textContent=t('converting');progress.value=0;uploadButton.disabled=true;
   setTimeout(()=>{
     const form=new FormData();form.append('image',new Blob([toRgb565()],{type:'application/octet-stream'}),'clock.rgb565');
     const xhr=new XMLHttpRequest();xhr.open('POST','/upload');
     xhr.upload.onprogress=e=>{if(e.lengthComputable)progress.value=Math.round(e.loaded*100/e.total)};
-    xhr.onload=()=>{uploadButton.disabled=false;msg.textContent=xhr.status===200?'上传成功，屏幕即将刷新':'上传失败：'+xhr.responseText;refreshStatus()};
-    xhr.onerror=()=>{uploadButton.disabled=false;msg.textContent='上传连接中断'};xhr.send(form);
+    xhr.onload=()=>{uploadButton.disabled=false;msg.textContent=xhr.status===200?t('upload_success'):t('upload_failed')+xhr.responseText;refreshStatus()};
+    xhr.onerror=()=>{uploadButton.disabled=false;msg.textContent=t('upload_interrupted')};xhr.send(form);
   },30);
 });
 
 $('#clear').addEventListener('click',async()=>{
-  if(!confirm('确定清空设备中的全部相册图片？此操作不可撤销。'))return;
+  if(!confirm(t('confirm_clear')))return;
   try{const response=await fetch('/clear-image',{method:'POST'});msg.textContent=await response.text();refreshStatus()}
-  catch(e){msg.textContent='删除失败：连接中断'}
+  catch(e){msg.textContent=t('delete_failed')}
 });
 
 fontSelect.addEventListener('change',async()=>{
-  fontSelect.disabled=true;fontMsg.textContent='正在切换字体…';
+  fontSelect.disabled=true;fontMsg.textContent=t('switching_font');
   try{
     const response=await fetch('/font',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({font:fontSelect.value})});
     const text=await response.text();if(!response.ok)throw new Error(text);
     fontMsg.textContent=text;
-  }catch(e){fontMsg.textContent=e.message||'字体切换失败'}
+  }catch(e){fontMsg.textContent=e.message||t('font_failed')}
   finally{fontSelect.disabled=false}
 });
 
 $('#saveSleep').addEventListener('click',async()=>{
-  const button=$('#saveSleep');button.disabled=true;sleepMsg.textContent='正在保存…';
+  const button=$('#saveSleep');button.disabled=true;sleepMsg.textContent=t('saving');
   try{
     const response=await fetch('/sleep-settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({idle_enabled:idleEnabled.checked?'1':'0',show_time:sleepShowTime.checked?'1':'0',idle_minutes:idleMinutes.value,night_start:nightStart.value,night_end:nightEnd.value})});
     const text=await response.text();if(!response.ok)throw new Error(text);sleepMsg.textContent=text;
-  }catch(e){sleepMsg.textContent=e.message||'保存失败'}
+  }catch(e){sleepMsg.textContent=e.message||t('save_failed')}
   finally{button.disabled=false}
 });
 
 $('#saveBackgroundSwitch').addEventListener('click',async()=>{
-  const button=$('#saveBackgroundSwitch'),output=$('#backgroundSwitchMsg');button.disabled=true;output.textContent='正在保存…';
+  const button=$('#saveBackgroundSwitch'),output=$('#backgroundSwitchMsg');button.disabled=true;output.textContent=t('saving');
   try{
     const body=new URLSearchParams({album_auto:albumAuto.checked?'1':'0',album_minutes:albumMinutes.value,album_limit:albumLimit.value,weather_follow:weatherFollow.checked?'1':'0',weather_auto:weatherAuto.checked?'1':'0',weather_minutes:weatherMinutes.value});
     const response=await fetch('/background-switch',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
     const text=await response.text();if(!response.ok)throw new Error(text);output.textContent=text;
-  }catch(e){output.textContent=e.message||'保存失败'}finally{button.disabled=false}
+  }catch(e){output.textContent=e.message||t('save_failed')}finally{button.disabled=false}
 });
 
 $('#saveWeather').addEventListener('click',async()=>{
-  const button=$('#saveWeather');button.disabled=true;$('#weatherMsg').textContent='正在保存…';
+  const button=$('#saveWeather');button.disabled=true;$('#weatherMsg').textContent=t('saving');
   try{
     const body=new URLSearchParams({host:weatherHost.value,key:weatherKey.value,auto_location:weatherAutoLocation.checked?'1':'0',latitude:weatherLatitude.value,longitude:weatherLongitude.value});
     const response=await fetch('/weather-settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
     const text=await response.text();if(!response.ok)throw new Error(text);$('#weatherMsg').textContent=text;
-  }catch(e){$('#weatherMsg').textContent=e.message||'保存失败'}finally{button.disabled=false}
+  }catch(e){$('#weatherMsg').textContent=e.message||t('save_failed')}finally{button.disabled=false}
 });
+
+async function postUiSettings(body){
+  appearanceMsg.textContent=t('saving');
+  try{
+    const response=await fetch('/ui-settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(body)});
+    const text=await response.text();if(!response.ok)throw new Error(text);
+    appearanceMsg.textContent=t('appearance_saved');refreshStatus();
+  }catch(e){appearanceMsg.textContent=e.message||t('appearance_failed')}
+}
+deviceLangSelect.addEventListener('change',()=>{postUiSettings({lang:deviceLangSelect.value})});
+deviceThemeSelect.addEventListener('change',()=>{postUiSettings({theme:deviceThemeSelect.value})});
+pageLangSelect.addEventListener('change',()=>{webLang=pageLangSelect.value;localStorage.setItem('clockWebLang',webLang);applyI18n();refreshStatus()});
 
 function minuteToTime(value){const minute=Number(value)||0;return String(Math.floor(minute/60)).padStart(2,'0')+':'+String(minute%60).padStart(2,'0')}
 
-function syncSettingState(){idleMinutes.disabled=!idleEnabled.checked;nightStart.disabled=!sleepShowTime.checked;nightEnd.disabled=!sleepShowTime.checked;weatherLocationState.textContent=weatherAutoLocation.checked?'自动定位已启用；手动坐标将作为后备。':'自动定位已关闭；将使用手动经纬度。'}
+function syncSettingState(){idleMinutes.disabled=!idleEnabled.checked;nightStart.disabled=!sleepShowTime.checked;nightEnd.disabled=!sleepShowTime.checked;weatherLocationState.textContent=weatherAutoLocation.checked?t('auto_loc_enabled'):t('auto_loc_disabled')}
 idleEnabled.addEventListener('change',syncSettingState);sleepShowTime.addEventListener('change',syncSettingState);weatherAutoLocation.addEventListener('change',syncSettingState);
 
 async function refreshStatus(){
   try{
     const status=await(await fetch('/status',{cache:'no-store'})).json();
-    $('#state').textContent=status.connected?status.ssid+' · '+status.ip:(status.portal?status.ap_ssid:'Wi-Fi 未连接');
+    $('#state').textContent=status.connected?status.ssid+' · '+status.ip:(status.portal?status.ap_ssid:t('wifi_disconnected'));
     if(!$('#ssid').value)$('#ssid').value=status.ssid||'';
+    deviceLang=status.lang??0;
+    if(document.activeElement!==deviceLangSelect)deviceLangSelect.value=String(status.lang??0);
+    if(document.activeElement!==deviceThemeSelect)deviceThemeSelect.value=String(status.theme??0);
     if(document.activeElement!==fontSelect)fontSelect.value=String(status.font??0);
     if(document.activeElement!==idleMinutes)idleMinutes.value=String(status.idle_minutes??15);
     if(document.activeElement!==idleEnabled)idleEnabled.checked=status.idle_enabled!==false;
@@ -284,7 +346,7 @@ async function refreshStatus(){
     if(document.activeElement!==albumAuto)albumAuto.checked=!!status.album_auto;
     if(document.activeElement!==albumMinutes)albumMinutes.value=String(status.album_minutes??30);
     if(document.activeElement!==albumLimit)albumLimit.value=String(status.album_limit??20);
-    albumLimit.max=String(status.album_capacity??20);albumState.textContent='当前 '+(status.image_count??0)+' 张；当前上限 '+(status.album_limit??20)+' 张，设备最高 '+(status.album_capacity??20)+' 张。';
+    albumLimit.max=String(status.album_capacity??20);albumState.textContent=fmt('album_state_fmt',status.image_count??0,status.album_limit??20,status.album_capacity??20);
     if(document.activeElement!==weatherAuto)weatherAuto.checked=!!status.weather_auto;
     if(document.activeElement!==weatherFollow)weatherFollow.checked=status.weather_follow!==false;
     if(document.activeElement!==weatherMinutes)weatherMinutes.value=String(status.weather_minutes??30);
@@ -293,10 +355,12 @@ async function refreshStatus(){
     if(document.activeElement!==weatherAutoLocation)weatherAutoLocation.checked=status.weather_auto_location!==false;
     const parts=(status.weather_location||'').split(',');
     if(parts.length===2){if(document.activeElement!==weatherLongitude)weatherLongitude.value=parts[0];if(document.activeElement!==weatherLatitude)weatherLatitude.value=parts[1]}
-    if(status.weather_city)weatherLocationState.textContent='当前定位：'+status.weather_city+(status.weather_timezone?' · '+status.weather_timezone:'');else syncSettingState();
-  }catch(e){$('#state').textContent='设备暂时无响应'}
+    if(status.weather_city)weatherLocationState.textContent=t('current_location')+status.weather_city+(status.weather_timezone?' · '+status.weather_timezone:'');else syncSettingState();
+    applyI18n();
+  }catch(e){$('#state').textContent=t('device_unresponsive')}
 }
-syncSettingState();refreshStatus();setInterval(refreshStatus,5000);render();
+$('#state').textContent=t('connecting');
+applyI18n();syncSettingState();refreshStatus();setInterval(refreshStatus,5000);render();
 </script>
 </body>
 </html>

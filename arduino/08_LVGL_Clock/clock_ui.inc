@@ -1,6 +1,43 @@
 // LVGL clock UI, dynamic background and image loading.
 // Included once by 08_LVGL_Clock.ino inside its private namespace.
 
+// RAM copies of the built-in Montserrat fonts with a French accent fallback.
+// The glyph bitmaps stay in flash; only these small descriptors live in RAM.
+lv_font_t lv_font_ui_14;
+lv_font_t lv_font_ui_16;
+lv_font_t lv_font_ui_18;
+lv_font_t lv_font_ui_20;
+lv_font_t lv_font_ui_22;
+lv_font_t lv_font_ui_24;
+lv_font_t lv_font_ui_25;
+lv_font_t lv_font_ui_28;
+lv_font_t lv_font_ui_30;
+lv_font_t lv_font_ui_32;
+
+void initUiFonts() {
+  struct UiFontBinding {
+    lv_font_t *destination;
+    const lv_font_t *base;
+    const lv_font_t *accent;
+  };
+  const UiFontBinding bindings[] = {
+    {&lv_font_ui_14, &lv_font_montserrat_14, &lv_font_accent_14},
+    {&lv_font_ui_16, &lv_font_montserrat_16, &lv_font_accent_16},
+    {&lv_font_ui_18, &lv_font_montserrat_18, &lv_font_accent_18},
+    {&lv_font_ui_20, &lv_font_montserrat_20, &lv_font_accent_20},
+    {&lv_font_ui_22, &lv_font_montserrat_22, &lv_font_accent_22},
+    {&lv_font_ui_24, &lv_font_montserrat_24, &lv_font_accent_24},
+    {&lv_font_ui_25, &lv_font_montserrat_25, &lv_font_accent_25},
+    {&lv_font_ui_28, &lv_font_montserrat_28, &lv_font_accent_28},
+    {&lv_font_ui_30, &lv_font_montserrat_30, &lv_font_accent_30},
+    {&lv_font_ui_32, &lv_font_montserrat_32, &lv_font_accent_32},
+  };
+  for (const UiFontBinding &binding : bindings) {
+    *binding.destination = *binding.base;
+    binding.destination->fallback = binding.accent;
+  }
+}
+
 const lv_font_t *currentStandbyClockFont() {
   switch (clockFontIndex) {
     case CLOCK_FONT_KAMERON: return &lv_font_kameron_96;
@@ -85,14 +122,16 @@ void resizeTimePanelForText(const char *text) {
   lv_obj_set_size(timePanel, timePanelWidth, TIME_PANEL_HEIGHT);
 
   if (!timePanelPixels || !timeBackground) {
-    lv_obj_set_style_bg_color(timePanel, lv_color_hex(0x101C2A), 0);
+    lv_obj_set_style_bg_color(timePanel, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(timePanel, LV_OPA_20, 0);
     lv_obj_set_style_radius(timePanel, TIME_PANEL_RADIUS, 0);
     return;
   }
 
-  const lv_color_t leftColor = lv_color_hex(0x050B14);
-  const lv_color_t rightColor = lv_color_hex(0x36516F);
+  // A near-black scrim keeps the time legible over album photos while staying
+  // invisible on the true-black AMOLED background when no image is loaded.
+  const lv_color_t leftColor = lv_color_hex(0x000000);
+  const lv_color_t rightColor = lv_color_hex(themeIsAmber() ? 0x1A1206 : 0x101010);
   const float halfWidth = timePanelWidth * 0.5f;
   const float halfHeight = TIME_PANEL_HEIGHT * 0.5f;
 
@@ -144,9 +183,8 @@ void applyClockFont() {
 
 void createClockUi() {
   lv_obj_t *screen = lv_scr_act();
-  lv_obj_set_style_bg_color(screen, lv_color_hex(0x070A10), 0);
-  lv_obj_set_style_bg_grad_color(screen, lv_color_hex(0x111A2C), 0);
-  lv_obj_set_style_bg_grad_dir(screen, LV_GRAD_DIR_VER, 0);
+  lv_obj_set_style_bg_color(screen, themePageBackground(), 0);
+  lv_obj_set_style_bg_grad_dir(screen, LV_GRAD_DIR_NONE, 0);
   lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
   backgroundImage = lv_img_create(screen);
@@ -187,9 +225,9 @@ void createClockUi() {
   lv_obj_move_foreground(timePanel);
 
   dateLabel = lv_label_create(screen);
-  lv_label_set_text(dateLabel, "WAITING FOR NTP");
-  lv_obj_set_style_text_font(dateLabel, &lv_font_montserrat_22, 0);
-  lv_obj_set_style_text_color(dateLabel, lv_color_hex(0xDCEBFF), 0);
+  i18nRegister(dateLabel, STR_WAITING_NTP);
+  lv_obj_set_style_text_font(dateLabel, &lv_font_ui_22, 0);
+  lv_obj_set_style_text_color(dateLabel, themeTextDim(0xDCEBFF), 0);
   lv_obj_set_style_shadow_color(dateLabel, lv_color_black(), 0);
   lv_obj_set_style_shadow_width(dateLabel, 10, 0);
   lv_obj_set_style_shadow_opa(dateLabel, LV_OPA_70, 0);
@@ -197,34 +235,63 @@ void createClockUi() {
   lv_obj_add_flag(dateLabel, LV_OBJ_FLAG_HIDDEN);
 
   statusLabel = lv_label_create(screen);
-  lv_label_set_text(statusLabel, "Wi-Fi not configured");
-  lv_obj_set_style_text_font(statusLabel, &lv_font_montserrat_16, 0);
-  lv_obj_set_style_text_color(statusLabel, lv_color_hex(0x91A4BE), 0);
+  lv_label_set_text(statusLabel, tr(STR_WIFI_NOT_CONFIGURED));
+  lv_obj_set_style_text_font(statusLabel, &lv_font_ui_16, 0);
+  lv_obj_set_style_text_color(statusLabel, themeTextDim(0x91A4BE), 0);
   lv_obj_align(statusLabel, LV_ALIGN_TOP_MID, 0, 34);
   lv_obj_add_flag(statusLabel, LV_OBJ_FLAG_HIDDEN);
 
   addressLabel = lv_label_create(screen);
-  lv_label_set_text(addressLabel, "Starting services...");
+  lv_label_set_text(addressLabel, tr(STR_STARTING_SERVICES));
   lv_obj_set_width(addressLabel, 380);
   lv_obj_set_style_text_align(addressLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(addressLabel, &lv_font_montserrat_14, 0);
-  lv_obj_set_style_text_color(addressLabel, lv_color_hex(0xB8C5D8), 0);
+  lv_obj_set_style_text_font(addressLabel, &lv_font_ui_14, 0);
+  lv_obj_set_style_text_color(addressLabel, themeTextDim(0xB8C5D8), 0);
   lv_obj_align(addressLabel, LV_ALIGN_BOTTOM_MID, 0, -38);
   lv_obj_add_flag(addressLabel, LV_OBJ_FLAG_HIDDEN);
 
   settingsButton = lv_btn_create(screen);
   lv_obj_set_size(settingsButton, 56, 56);
   lv_obj_set_style_radius(settingsButton, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(settingsButton, lv_color_hex(0x172235), 0);
+  lv_obj_set_style_bg_color(settingsButton, lv_color_hex(themeSurface(0x0A0A0A)), 0);
   lv_obj_set_style_bg_opa(settingsButton, LV_OPA_80, 0);
+  lv_obj_set_style_border_width(settingsButton, 1, 0);
+  lv_obj_set_style_border_color(settingsButton, lv_color_hex(themeBorder(0x2A2A2A)), 0);
   lv_obj_align(settingsButton, LV_ALIGN_BOTTOM_RIGHT, -22, -20);
   lv_obj_add_event_cb(settingsButton, settingsEvent, LV_EVENT_CLICKED, nullptr);
 
-  createTablerIcon(settingsButton, TABLER_ICON_ADJUSTMENTS, 28);
+  createTablerIcon(settingsButton, TABLER_ICON_ADJUSTMENTS, 28, themeIcon());
   lv_obj_add_flag(settingsButton, LV_OBJ_FLAG_HIDDEN);
 
   createControlPanel();
   createAppMenu();
+}
+
+// Re-apply the active theme to the clock/album screen.
+void refreshClockTheme() {
+  lv_obj_t *screen = lv_scr_act();
+  lv_obj_set_style_bg_color(screen, themePageBackground(), 0);
+  lv_obj_set_style_bg_grad_dir(screen, LV_GRAD_DIR_NONE, 0);
+  if (timeLabel) {
+    lv_obj_set_style_text_color(timeLabel, themeText(), 0);
+    // A faint phosphor glow on the big digits sells the CRT look. It is only
+    // redrawn once a minute, so the complex-draw shadow cost is negligible.
+    lv_obj_set_style_shadow_color(timeLabel, lv_color_hex(CRT_AMBER_GLOW), 0);
+    lv_obj_set_style_shadow_width(timeLabel, themeIsAmber() ? 8 : 0, 0);
+    lv_obj_set_style_shadow_opa(timeLabel, themeIsAmber() ? LV_OPA_40 : LV_OPA_TRANSP, 0);
+  }
+  if (dateLabel) lv_obj_set_style_text_color(dateLabel, themeTextDim(0xDCEBFF), 0);
+  if (statusLabel) lv_obj_set_style_text_color(statusLabel, themeTextDim(0x91A4BE), 0);
+  if (addressLabel) lv_obj_set_style_text_color(addressLabel, themeTextDim(0xB8C5D8), 0);
+  if (settingsButton) {
+    lv_obj_set_style_bg_color(settingsButton, lv_color_hex(themeSurface(0x0A0A0A)), 0);
+    lv_obj_set_style_border_color(settingsButton, lv_color_hex(themeBorder(0x2A2A2A)), 0);
+    if (lv_obj_get_child_cnt(settingsButton))
+      setTablerIconColor(lv_obj_get_child(settingsButton, 0), themeIcon());
+  }
+  // Regenerate the feathered scrim with the theme's tint.
+  timePanelWidth = 0;
+  resizeTimePanelForText(displayedTimeText[0] ? displayedTimeText : "--:--");
 }
 
 bool initDisplayAndLvgl() {
@@ -303,6 +370,7 @@ bool initDisplayAndLvgl() {
 
   Serial.println("[3/5] LVGL initialization");
   lv_init();
+  initUiFonts();
   logClockFontStatus("Montserrat", &lv_font_montserrat_48);
   logClockFontStatus("Kameron", &lv_font_kameron_48);
   logClockFontStatus("Silkscreen", &lv_font_silkscreen_48);
@@ -393,17 +461,17 @@ void updateNetworkLabels() {
   if (WiFi.status() == WL_CONNECTED) {
     lv_label_set_text_fmt(statusLabel, "%s", WiFi.SSID().c_str());
   } else if (portalActive) {
-    lv_label_set_text(statusLabel, "Configuration mode");
+    lv_label_set_text(statusLabel, tr(STR_CONFIG_MODE));
   } else {
-    lv_label_set_text(statusLabel, "Connecting...");
+    lv_label_set_text(statusLabel, tr(STR_CONNECTING));
   }
 
   if (portalActive) {
-    lv_label_set_text_fmt(addressLabel, "AP: %s  OPEN NETWORK\nOpen 192.168.4.1", apSsid);
+    lv_label_set_text_fmt(addressLabel, tr(STR_AP_OPEN_NETWORK), apSsid);
   } else if (WiFi.status() == WL_CONNECTED) {
-    lv_label_set_text_fmt(addressLabel, "Phone UI: http://%s", WiFi.localIP().toString().c_str());
+    lv_label_set_text_fmt(addressLabel, tr(STR_PHONE_UI), WiFi.localIP().toString().c_str());
   } else {
-    lv_label_set_text(addressLabel, "Tap the settings button to start phone setup");
+    lv_label_set_text(addressLabel, tr(STR_TAP_SETTINGS_SETUP));
   }
   updateControlPanelStatus();
 }

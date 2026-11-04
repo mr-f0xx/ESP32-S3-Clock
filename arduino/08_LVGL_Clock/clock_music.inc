@@ -181,6 +181,7 @@ class ClockVideoWavGenerator : public AudioGeneratorWAV {
   uint16_t channelCount() const { return channels; }
   uint16_t sampleBits() const { return bitsPerSample; }
   uint32_t pcmDataBytes() const { return dataBytes; }
+  uint32_t pcmDataOffset() const { return dataOffset; }
   uint32_t durationMs() const {
     const uint32_t blockBytes = channels * (bitsPerSample / 8U);
     if (!sampleRate || !blockBytes) return 0;
@@ -290,12 +291,24 @@ void refreshMusicPlaylistStyles() {
   for (uint32_t i = 0; i < childCount; ++i) {
     lv_obj_t *row = lv_obj_get_child(musicPlaylistList, i);
     const bool selected = i == musicTrackIndex;
-    lv_obj_set_style_bg_color(row,
-      lv_color_hex(selected ? UI_ACCENT_VIOLET : 0x171A22), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(row, selected ? LV_OPA_COVER : LV_OPA_80,
-                            LV_PART_MAIN);
-    lv_obj_set_style_border_color(row,
-      lv_color_hex(selected ? 0xA78BFA : 0x282C37), LV_PART_MAIN);
+    if (themeIsAmber()) {
+      // Inverted amber key for the active track, black keys for the rest.
+      lv_obj_set_style_bg_color(row,
+        selected ? lv_color_hex(CRT_AMBER) : lv_color_black(), LV_PART_MAIN);
+      lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_PART_MAIN);
+      lv_obj_set_style_border_color(row, lv_color_hex(CRT_AMBER_FAINT), LV_PART_MAIN);
+    } else {
+      lv_obj_set_style_bg_color(row,
+        lv_color_hex(selected ? UI_ACCENT_VIOLET : 0x0D0D12), LV_PART_MAIN);
+      lv_obj_set_style_bg_opa(row, selected ? LV_OPA_COVER : LV_OPA_80, LV_PART_MAIN);
+      lv_obj_set_style_border_color(row,
+        lv_color_hex(selected ? 0xA78BFA : 0x282C37), LV_PART_MAIN);
+    }
+    if (lv_obj_get_child_cnt(row)) {
+      lv_obj_set_style_text_color(lv_obj_get_child(row, 0),
+        themeIsAmber() ? (selected ? lv_color_black() : lv_color_hex(CRT_AMBER))
+                       : lv_color_white(), 0);
+    }
   }
 }
 
@@ -304,11 +317,15 @@ String musicDisplayName(const String &path) {
   return slash >= 0 ? path.substring(slash + 1) : path;
 }
 
-void updateMusicPageText(const char *status = nullptr) {
+// The current status line is stored as a string id so a language switch can
+// re-render it without losing the live playback state.
+UiStr musicStatusId = STR_INSERT_SD;
+
+void updateMusicPageText() {
   if (musicTrackLabel) {
     lv_label_set_text(musicTrackLabel,
                       musicTrackCount ? musicDisplayName(musicTracks[musicTrackIndex]).c_str()
-                                      : "No music found");
+                                      : tr(STR_NO_MUSIC_FOUND));
   }
   if (musicCountLabel) {
     if (musicTrackCount) {
@@ -316,13 +333,18 @@ void updateMusicPageText(const char *status = nullptr) {
       snprintf(count, sizeof(count), "%u / %u", musicTrackIndex + 1, musicTrackCount);
       lv_label_set_text(musicCountLabel, count);
     } else {
-      lv_label_set_text(musicCountLabel, "MP3 / WAV");
+      lv_label_set_text(musicCountLabel, tr(STR_MP3_WAV));
     }
   }
-  if (status && musicStatusLabel) lv_label_set_text(musicStatusLabel, status);
+  if (musicStatusLabel) lv_label_set_text(musicStatusLabel, tr(musicStatusId));
   updateMusicPlayPauseIcon();
   updateMusicPlaybackModeIcon();
   refreshMusicPlaylistStyles();
+}
+
+void setMusicStatus(UiStr id) {
+  musicStatusId = id;
+  updateMusicPageText();
 }
 
 bool isSupportedMusicFile(const String &name) {
@@ -354,8 +376,8 @@ void rebuildMusicPlaylist() {
     lv_label_set_text(label, title);
     lv_obj_set_width(label, 310);
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_18, 0);
-    lv_obj_set_style_text_color(label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(label, &lv_font_ui_18, 0);
+    lv_obj_set_style_text_color(label, themeText(), 0);
     lv_obj_align(label, LV_ALIGN_LEFT_MID, 0, 0);
   }
   refreshMusicPlaylistStyles();
@@ -367,7 +389,7 @@ bool mountMusicSd() {
   if (!SD.begin(SD_CS_PIN, musicSdSpi, MUSIC_SD_FREQUENCY)) {
     musicSdSpi.end();
     Serial.println("Music: SD mount failed");
-    updateMusicPageText("SD card unavailable");
+    setMusicStatus(STR_SD_UNAVAILABLE);
     return false;
   }
   musicSdReady = true;
@@ -381,7 +403,7 @@ void scanMusicTracks() {
   musicTrackIndex = 0;
   rebuildMusicPlaylist();
   if (!weatherWallpaperSdReadyForOtherUsers()) {
-    updateMusicPageText("SD card is still busy");
+    setMusicStatus(STR_SD_BUSY);
     Serial.println("Music: waiting for weather SD worker to stop");
     return;
   }
@@ -391,7 +413,7 @@ void scanMusicTracks() {
   File directory = SD.open(scanPath);
   if (!directory || !directory.isDirectory()) {
     if (directory) directory.close();
-    updateMusicPageText("Cannot open music folder");
+    setMusicStatus(STR_CANNOT_OPEN_MUSIC_FOLDER);
     return;
   }
 
@@ -430,7 +452,7 @@ void scanMusicTracks() {
   }
   Serial.printf("Music: found %u track(s) in %s\n", musicTrackCount, scanPath);
   rebuildMusicPlaylist();
-  updateMusicPageText(musicTrackCount ? "Ready" : "No MP3/WAV on SD");
+  setMusicStatus(musicTrackCount ? STR_READY : STR_NO_MP3_WAV_SD);
 }
 
 bool initializeMusicCodec() {
@@ -453,7 +475,7 @@ bool initializeMusicCodec() {
 
   musicCodec = es8311_create(0, ES8311_I2C_ADDRESS);
   if (!musicCodec) {
-    updateMusicPageText("Audio codec unavailable");
+    setMusicStatus(STR_CODEC_UNAVAILABLE);
     return false;
   }
   const es8311_clock_config_t clockConfig = {
@@ -467,7 +489,7 @@ bool initializeMusicCodec() {
                   ES8311_RESOLUTION_16) != ESP_OK) {
     es8311_delete(musicCodec);
     musicCodec = nullptr;
-    updateMusicPageText("Audio codec init failed");
+    setMusicStatus(STR_CODEC_INIT_FAILED);
     return false;
   }
   const esp_err_t wakeResult = es8311_power_up(musicCodec);
@@ -477,7 +499,7 @@ bool initializeMusicCodec() {
     es8311_delete(musicCodec);
     musicCodec = nullptr;
     audioCodecReachable = false;
-    updateMusicPageText("Audio wake failed");
+    setMusicStatus(STR_AUDIO_WAKE_FAILED);
     return false;
   }
   audioCodecReachable = true;
@@ -492,7 +514,7 @@ bool initializeMusicCodec() {
     musicOutput = nullptr;
     es8311_delete(musicCodec);
     musicCodec = nullptr;
-    updateMusicPageText("I2S setup failed");
+    setMusicStatus(STR_I2S_SETUP_FAILED);
     return false;
   }
   // ES8311 is mono. Averaging L/R here preserves information from both
@@ -585,6 +607,8 @@ void holdVideoAudioForSeek() {
 }
 
 bool startVideoAudioPlayback(const String &path, uint32_t positionMs) {
+  stopAudiobookPlayback();
+  stopRadioPlayback();
   const uint64_t requestStartedAtUs = esp_timer_get_time();
   if (videoAudioActive && videoWavGenerator && musicOutput &&
       videoAudioPath == path) {
@@ -752,14 +776,16 @@ void printVideoAudioDiagnostics(uint32_t videoPositionMs,
 bool startMusicTrack(uint8_t index) {
   if (!musicTrackCount || index >= musicTrackCount ||
       !weatherWallpaperSdReadyForOtherUsers() || !mountMusicSd()) return false;
+  stopAudiobookPlayback();
   stopMusicPlayback();
+  stopRadioPlayback();
   musicTrackIndex = index;
   musicSource = new AudioFileSourceSD(musicTracks[musicTrackIndex].c_str());
   if (!musicSource || !musicSource->isOpen()) {
     Serial.printf("Music: cannot open %s\n",
                   musicTracks[musicTrackIndex].c_str());
     stopMusicPlayback();
-    updateMusicPageText("Cannot open track");
+    setMusicStatus(STR_CANNOT_OPEN_TRACK);
     return false;
   }
   if (!initializeMusicCodec()) {
@@ -775,13 +801,13 @@ bool startMusicTrack(uint8_t index) {
       !musicGenerator->begin(musicSource, musicOutput)) {
     if (musicOutput) musicOutput->stop();
     stopMusicPlayback();
-    updateMusicPageText("Unsupported audio file");
+    setMusicStatus(STR_UNSUPPORTED_AUDIO);
     return false;
   }
   musicPaused = false;
   musicSuspendedTrackPath = musicTracks[musicTrackIndex];
   digitalWrite(AUDIO_PA_PIN, HIGH);
-  updateMusicPageText("Playing");
+  setMusicStatus(STR_PLAYING);
   updateMusicProgress(true);
   Serial.printf("Music: playing %s\n", musicTracks[musicTrackIndex].c_str());
   return true;
@@ -860,7 +886,9 @@ void serviceAlarmSound() {
 
 void startAlarmSound() {
   const bool interruptedVideoAudio = videoAudioActive;
+  stopAudiobookPlayback();
   stopMusicPlayback();
+  stopRadioPlayback();
   videoAudioRestartRequested = interruptedVideoAudio;
   if (!initializeMusicCodec() || !musicOutput) {
     Serial.println("Alarm: audio codec unavailable");
@@ -941,7 +969,7 @@ void serviceMusicPlayback() {
     }
     startMusicTrack(next);
   } else {
-    updateMusicPageText("Finished");
+    setMusicStatus(STR_FINISHED);
     digitalWrite(AUDIO_PA_PIN, LOW);
   }
   updateMusicPlayPauseIcon();
@@ -953,7 +981,7 @@ bool pauseMusicForControlPanel() {
   if (!wasPlaying) return false;
   musicPaused = true;
   if (musicCodecReady) digitalWrite(AUDIO_PA_PIN, LOW);
-  updateMusicPageText("Paused by Controls");
+  setMusicStatus(STR_PAUSED_BY_CONTROLS);
   updateMusicPlayPauseIcon();
   Serial.println("Music: paused while Controls is open");
   return true;
@@ -965,7 +993,7 @@ void resumeMusicAfterControlPanel(bool wasPlaying) {
   // Refill I2S before reconnecting the power amplifier.
   serviceMusicPlayback();
   if (musicCodecReady) digitalWrite(AUDIO_PA_PIN, HIGH);
-  updateMusicPageText("Playing");
+  setMusicStatus(STR_PLAYING);
   updateMusicPlayPauseIcon();
   Serial.println("Music: resumed after Controls closed");
 }
@@ -981,12 +1009,12 @@ void toggleMusicPause() {
   musicPaused = !musicPaused;
   if (musicPaused) {
     digitalWrite(AUDIO_PA_PIN, LOW);
-    updateMusicPageText("Paused");
+    setMusicStatus(STR_PAUSED);
   } else {
     // Refill I2S while the power amplifier is still muted, then reconnect it.
     serviceMusicPlayback();
     digitalWrite(AUDIO_PA_PIN, HIGH);
-    updateMusicPageText("Playing");
+    setMusicStatus(STR_PLAYING);
   }
 }
 
@@ -1036,11 +1064,11 @@ void musicPlaybackModeEvent(lv_event_t *event) {
     (musicPlaybackMode + 1U) % MUSIC_MODE_COUNT);
   preferences.putUChar("music_mode", musicPlaybackMode);
   updateMusicPlaybackModeIcon();
-  const char *status = musicPlaybackMode == MUSIC_MODE_REPEAT_ONE
-                         ? "Repeat one"
+  const UiStr status = musicPlaybackMode == MUSIC_MODE_REPEAT_ONE
+                         ? STR_REPEAT_ONE
                          : (musicPlaybackMode == MUSIC_MODE_SHUFFLE
-                              ? "Shuffle" : "Repeat all");
-  updateMusicPageText(status);
+                              ? STR_SHUFFLE : STR_REPEAT_ALL);
+  setMusicStatus(status);
 }
 
 void musicTrackRowEvent(lv_event_t *event) {
@@ -1173,17 +1201,17 @@ lv_obj_t *createMusicControlButton(lv_obj_t *parent, lv_coord_t size,
   lv_obj_set_size(button, size, size);
   lv_obj_align(button, LV_ALIGN_TOP_MID, x, y);
   lv_obj_set_style_radius(button, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(button, lv_color_hex(0x20232D), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0A0A0A)), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_width(button, 1, LV_PART_MAIN);
-  lv_obj_set_style_border_color(button, lv_color_hex(0x343846), LV_PART_MAIN);
+  lv_obj_set_style_border_color(button, lv_color_hex(themeBorder(0x343846)), LV_PART_MAIN);
   lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(button, lv_color_hex(UI_ACCENT_VIOLET),
+  lv_obj_set_style_bg_color(button, lv_color_hex(themeAccent(UI_ACCENT_VIOLET)),
                             LV_PART_MAIN | LV_STATE_PRESSED);
   lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(button, LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
-  createTablerIcon(button, iconKind, iconSize);
+  createTablerIcon(button, iconKind, iconSize, themeIcon());
   return button;
 }
 
@@ -1192,7 +1220,7 @@ void createMusicPlaylistPanel() {
   lv_obj_remove_style_all(musicPlaylistPanel);
   lv_obj_set_size(musicPlaylistPanel, SCREEN_WIDTH, SCREEN_HEIGHT);
   lv_obj_set_pos(musicPlaylistPanel, 0, 0);
-  lv_obj_set_style_bg_color(musicPlaylistPanel, lv_color_hex(0x0D0F14), 0);
+  lv_obj_set_style_bg_color(musicPlaylistPanel, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(musicPlaylistPanel, LV_OPA_COVER, 0);
   lv_obj_add_flag(musicPlaylistPanel, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_clear_flag(musicPlaylistPanel, LV_OBJ_FLAG_SCROLLABLE);
@@ -1200,10 +1228,10 @@ void createMusicPlaylistPanel() {
                       LV_EVENT_GESTURE, nullptr);
 
   lv_obj_t *title = lv_label_create(musicPlaylistPanel);
-  lv_label_set_text(title, "PLAYLIST");
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
+  i18nRegister(title, STR_PLAYLIST);
+  lv_obj_set_style_text_font(title, &lv_font_ui_24, 0);
   lv_obj_set_style_text_letter_space(title, 3, 0);
-  lv_obj_set_style_text_color(title, lv_color_white(), 0);
+  lv_obj_set_style_text_color(title, themeText(), 0);
   lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 25);
 
   musicPlaylistList = lv_obj_create(musicPlaylistPanel);
@@ -1217,7 +1245,7 @@ void createMusicPlaylistPanel() {
   lv_obj_set_style_bg_opa(musicPlaylistList, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(musicPlaylistList, 0, 0);
   lv_obj_set_style_width(musicPlaylistList, 3, LV_PART_SCROLLBAR);
-  lv_obj_set_style_bg_color(musicPlaylistList, lv_color_hex(UI_ACCENT_VIOLET),
+  lv_obj_set_style_bg_color(musicPlaylistList, lv_color_hex(themeAccent(UI_ACCENT_VIOLET)),
                             LV_PART_SCROLLBAR);
   lv_obj_add_flag(musicPlaylistList, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
@@ -1229,7 +1257,7 @@ void createMusicPage(lv_obj_t *screen) {
   lv_obj_remove_style_all(musicPage);
   lv_obj_set_pos(musicPage, 0, 0);
   lv_obj_set_size(musicPage, SCREEN_WIDTH, SCREEN_HEIGHT);
-  lv_obj_set_style_bg_color(musicPage, lv_color_hex(0x0D0F14), 0);
+  lv_obj_set_style_bg_color(musicPage, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(musicPage, LV_OPA_COVER, 0);
   lv_obj_clear_flag(musicPage,
                     LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
@@ -1241,21 +1269,22 @@ void createMusicPage(lv_obj_t *screen) {
   // A static ellipsis avoids continuous full-width redraws while decoding.
   lv_label_set_long_mode(musicTrackLabel, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_align(musicTrackLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(musicTrackLabel, &lv_font_montserrat_32, 0);
-  lv_obj_set_style_text_color(musicTrackLabel, lv_color_white(), 0);
+  lv_obj_set_style_text_font(musicTrackLabel, &lv_font_ui_32, 0);
+  lv_obj_set_style_text_color(musicTrackLabel, themeText(), 0);
   lv_obj_align(musicTrackLabel, LV_ALIGN_TOP_MID, 0, 48);
 
   musicStatusLabel = lv_label_create(musicPage);
-  lv_obj_set_size(musicStatusLabel, 190, 30);
-  lv_obj_set_style_text_font(musicStatusLabel, &lv_font_montserrat_18, 0);
-  lv_obj_set_style_text_color(musicStatusLabel, lv_color_hex(UI_ACCENT_VIOLET), 0);
+  lv_obj_set_size(musicStatusLabel, 230, 30);
+  lv_obj_set_style_text_font(musicStatusLabel, &lv_font_ui_18, 0);
+  lv_obj_set_style_text_color(musicStatusLabel,
+                              lv_color_hex(themeAccent(UI_ACCENT_VIOLET)), 0);
   lv_obj_set_style_text_align(musicStatusLabel, LV_TEXT_ALIGN_LEFT, 0);
   lv_obj_align(musicStatusLabel, LV_ALIGN_TOP_LEFT, 40, 178);
 
   musicCountLabel = lv_label_create(musicPage);
   lv_obj_set_size(musicCountLabel, 150, 30);
-  lv_obj_set_style_text_font(musicCountLabel, &lv_font_montserrat_16, 0);
-  lv_obj_set_style_text_color(musicCountLabel, lv_color_hex(0x777D8D), 0);
+  lv_obj_set_style_text_font(musicCountLabel, &lv_font_ui_16, 0);
+  lv_obj_set_style_text_color(musicCountLabel, themeTextDim(0x777D8D), 0);
   lv_obj_set_style_text_align(musicCountLabel, LV_TEXT_ALIGN_RIGHT, 0);
   lv_obj_align(musicCountLabel, LV_ALIGN_TOP_RIGHT, -40, 180);
 
@@ -1265,12 +1294,12 @@ void createMusicPage(lv_obj_t *screen) {
   lv_bar_set_range(musicProgressBar, 0, 100);
   lv_bar_set_value(musicProgressBar, 0, LV_ANIM_OFF);
   lv_obj_set_style_radius(musicProgressBar, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(musicProgressBar, lv_color_hex(0x252A36),
+  lv_obj_set_style_bg_color(musicProgressBar, lv_color_hex(themeSurface(0x1A1A1A)),
                             LV_PART_MAIN);
   lv_obj_set_style_bg_opa(musicProgressBar, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_radius(musicProgressBar, LV_RADIUS_CIRCLE,
                           LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(musicProgressBar, lv_color_hex(UI_ACCENT_VIOLET),
+  lv_obj_set_style_bg_color(musicProgressBar, lv_color_hex(themeAccent(UI_ACCENT_VIOLET)),
                             LV_PART_INDICATOR);
   lv_obj_set_style_bg_opa(musicProgressBar, LV_OPA_COVER,
                           LV_PART_INDICATOR);
@@ -1280,17 +1309,23 @@ void createMusicPage(lv_obj_t *screen) {
   musicModeIcons[MUSIC_MODE_REPEAT_ALL] = lv_obj_get_child(
     modeButton, lv_obj_get_child_cnt(modeButton) - 1);
   musicModeIcons[MUSIC_MODE_REPEAT_ONE] = createTablerIcon(
-    modeButton, TABLER_ICON_REPEAT_ONCE, 28);
+    modeButton, TABLER_ICON_REPEAT_ONCE, 28, themeIcon());
   musicModeIcons[MUSIC_MODE_SHUFFLE] = createTablerIcon(
-    modeButton, TABLER_ICON_SHUFFLE, 28);
+    modeButton, TABLER_ICON_SHUFFLE, 28, themeIcon());
   createMusicControlButton(musicPage, 58, -88, 352, musicPreviousEvent,
                            TABLER_ICON_SKIP_BACK, 28);
   lv_obj_t *playButton = createMusicControlButton(
     musicPage, 74, 0, 344, musicPlayPauseEvent, TABLER_ICON_PLAY, 32);
-  lv_obj_set_style_bg_color(playButton, lv_color_hex(UI_ACCENT_VIOLET), LV_PART_MAIN);
-  lv_obj_set_style_border_width(playButton, 0, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(playButton, lv_color_hex(themeAccent(UI_ACCENT_VIOLET)),
+                            LV_PART_MAIN);
+  lv_obj_set_style_border_width(playButton, themeIsAmber() ? 2 : 0, LV_PART_MAIN);
+  lv_obj_set_style_border_color(playButton, lv_color_hex(CRT_AMBER), LV_PART_MAIN);
   musicPlayIcon = lv_obj_get_child(playButton, lv_obj_get_child_cnt(playButton) - 1);
-  musicPauseIcon = createTablerIcon(playButton, TABLER_ICON_PAUSE, 32);
+  musicPauseIcon = createTablerIcon(playButton, TABLER_ICON_PAUSE, 32,
+    themeIsAmber() ? lv_color_black() : lv_color_white());
+  if (musicPlayIcon)
+    setTablerIconColor(musicPlayIcon,
+      themeIsAmber() ? lv_color_black() : lv_color_white());
   lv_obj_add_flag(musicPauseIcon, LV_OBJ_FLAG_HIDDEN);
   createMusicControlButton(musicPage, 58, 88, 352, musicNextEvent,
                            TABLER_ICON_SKIP_FORWARD, 28);
@@ -1298,8 +1333,60 @@ void createMusicPage(lv_obj_t *screen) {
                            TABLER_ICON_PLAYLIST, 28);
   updateMusicPlaybackModeIcon();
 
-  updateMusicPageText("Insert SD card");
+  setMusicStatus(STR_INSERT_SD);
   createMusicPlaylistPanel();
 
   lv_obj_add_flag(musicPage, LV_OBJ_FLAG_HIDDEN);
+}
+
+// Re-apply the active theme to the music player and its playlist overlay.
+void refreshMusicTheme() {
+  if (!musicPage) return;
+  lv_obj_set_style_bg_color(musicPage, themePageBackground(), 0);
+  if (musicTrackLabel) lv_obj_set_style_text_color(musicTrackLabel, themeText(), 0);
+  if (musicStatusLabel)
+    lv_obj_set_style_text_color(musicStatusLabel,
+      lv_color_hex(themeAccent(UI_ACCENT_VIOLET)), 0);
+  if (musicCountLabel)
+    lv_obj_set_style_text_color(musicCountLabel, themeTextDim(0x777D8D), 0);
+  if (musicProgressBar) {
+    lv_obj_set_style_bg_color(musicProgressBar, lv_color_hex(themeSurface(0x1A1A1A)),
+                              LV_PART_MAIN);
+    lv_obj_set_style_bg_color(musicProgressBar,
+      lv_color_hex(themeAccent(UI_ACCENT_VIOLET)), LV_PART_INDICATOR);
+  }
+  const uint32_t childCount = lv_obj_get_child_cnt(musicPage);
+  for (uint32_t i = 0; i < childCount; ++i) {
+    lv_obj_t *child = lv_obj_get_child(musicPage, i);
+    if (!lv_obj_check_type(child, &lv_btn_class)) continue;
+    const bool isPlayButton = lv_obj_get_width(child) == 74;
+    if (isPlayButton) {
+      lv_obj_set_style_bg_color(child, lv_color_hex(themeAccent(UI_ACCENT_VIOLET)),
+                                LV_PART_MAIN);
+      lv_obj_set_style_border_width(child, themeIsAmber() ? 2 : 0, LV_PART_MAIN);
+      lv_obj_set_style_border_color(child, lv_color_hex(CRT_AMBER), LV_PART_MAIN);
+      for (uint32_t j = 0; j < lv_obj_get_child_cnt(child); ++j)
+        setTablerIconColor(lv_obj_get_child(child, j),
+          themeIsAmber() ? lv_color_black() : lv_color_white());
+    } else {
+      lv_obj_set_style_bg_color(child, lv_color_hex(themeSurface(0x0A0A0A)),
+                                LV_PART_MAIN);
+      lv_obj_set_style_border_color(child, lv_color_hex(themeBorder(0x343846)),
+                                    LV_PART_MAIN);
+      lv_obj_set_style_bg_color(child, lv_color_hex(themeAccent(UI_ACCENT_VIOLET)),
+                                LV_PART_MAIN | LV_STATE_PRESSED);
+      for (uint32_t j = 0; j < lv_obj_get_child_cnt(child); ++j)
+        setTablerIconColor(lv_obj_get_child(child, j), themeIcon());
+    }
+  }
+  if (musicPlaylistPanel) {
+    lv_obj_set_style_bg_color(musicPlaylistPanel, themePageBackground(), 0);
+    if (lv_obj_get_child_cnt(musicPlaylistPanel))
+      lv_obj_set_style_text_color(lv_obj_get_child(musicPlaylistPanel, 0),
+                                  themeText(), 0);
+    if (musicPlaylistList)
+      lv_obj_set_style_bg_color(musicPlaylistList,
+        lv_color_hex(themeAccent(UI_ACCENT_VIOLET)), LV_PART_SCROLLBAR);
+  }
+  refreshMusicPlaylistStyles();
 }
