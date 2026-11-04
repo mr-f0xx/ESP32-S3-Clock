@@ -18,10 +18,18 @@ constexpr uint8_t APP_MENU_ITEMS_PER_PAGE = 4;
 lv_obj_t *clockModeSelector = nullptr;
 bool clockModeChoiceBusy = false;
 uint32_t clockModeChoiceSuppressedUntil = 0;
+// Power-off confirmation modal. Kept separate from the clock-mode selector so
+// a destructive action can never be triggered by the same touch release that
+// opened the launcher tile.
+lv_obj_t *powerOffSelector = nullptr;
+lv_obj_t *powerOffMessageLabel = nullptr;
+lv_obj_t *powerOffConfirmButton = nullptr;
+bool powerOffChoiceBusy = false;
+uint32_t powerOffChoiceSuppressedUntil = 0;
 // Track the launcher tiles so a theme change can recolor every key without
 // rebuilding the menu. The base color is the per-app accent used in the black
 // theme; the amber theme turns each tile into a black, amber-outlined key.
-constexpr uint8_t APP_MENU_TILE_CAPACITY = 9;
+constexpr uint8_t APP_MENU_TILE_CAPACITY = 10;
 lv_obj_t *appMenuTileButtons[APP_MENU_TILE_CAPACITY] = {};
 uint32_t appMenuTileColors[APP_MENU_TILE_CAPACITY] = {};
 uint8_t appMenuTileCount = 0;
@@ -35,7 +43,8 @@ enum AppMenuItem : uint8_t {
   APP_MENU_VIDEO,
   APP_MENU_WEATHER,
   APP_MENU_AUDIOBOOK,
-  APP_MENU_RADIO
+  APP_MENU_RADIO,
+  APP_MENU_POWER
 };
 
 void cancelPendingAppLaunches() {
@@ -53,6 +62,86 @@ void cancelPendingAppLaunches() {
 void consumeCurrentTouchRelease() {
   lv_indev_t *input = lv_indev_get_act();
   if (input) lv_indev_wait_release(input);
+}
+
+bool powerOffModalVisible() {
+  return powerOffSelector &&
+         !lv_obj_has_flag(powerOffSelector, LV_OBJ_FLAG_HIDDEN);
+}
+
+bool clockModeModalVisible() {
+  return clockModeSelector &&
+         !lv_obj_has_flag(clockModeSelector, LV_OBJ_FLAG_HIDDEN);
+}
+
+// The confirmation copy is dynamic because it depends on the live USB/VBUS
+// state and on whether the AXP2101 was detected at boot.
+void updatePowerOffMessage() {
+  if (!powerOffMessageLabel || !powerOffConfirmButton) return;
+  UiStr message = STR_POWER_OFF_NOTE;
+  if (!pmuReady) message = STR_POWER_OFF_UNAVAILABLE;
+  else if (power.isVbusIn()) message = STR_POWER_OFF_USB_NOTE;
+  lv_label_set_text(powerOffMessageLabel, tr(message));
+  if (pmuReady) lv_obj_clear_state(powerOffConfirmButton, LV_STATE_DISABLED);
+  else lv_obj_add_state(powerOffConfirmButton, LV_STATE_DISABLED);
+}
+
+void showPowerOffSelector() {
+  if (!powerOffSelector || deviceShuttingDown) return;
+  powerOffChoiceBusy = false;
+  powerOffChoiceSuppressedUntil = millis() + 250;
+  updatePowerOffMessage();
+  lv_obj_clear_flag(powerOffSelector, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_move_foreground(powerOffSelector);
+}
+
+void hidePowerOffSelector() {
+  if (!powerOffSelector) return;
+  lv_obj_add_flag(powerOffSelector, LV_OBJ_FLAG_HIDDEN);
+  powerOffChoiceBusy = false;
+}
+
+void powerOffChoiceEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  const uint32_t now = millis();
+  if (!powerOffModalVisible() || powerOffChoiceBusy || deviceShuttingDown ||
+      static_cast<int32_t>(now - powerOffChoiceSuppressedUntil) < 0) return;
+  const uintptr_t choice = reinterpret_cast<uintptr_t>(lv_event_get_user_data(event));
+  if (choice > 2) return;
+  powerOffChoiceBusy = true;
+  appMenuClickSuppressedUntil = now + 500;
+  consumeCurrentTouchRelease();
+  cancelPendingAppLaunches();
+  markUserActivity();
+  if (choice != 1) {
+    hidePowerOffSelector();
+    return;
+  }
+  if (!pmuReady) {
+    powerOffChoiceBusy = false;
+    updatePowerOffMessage();
+    return;
+  }
+  // requestDevicePowerOff() only returns when the shutdown sequence could not
+  // complete (for example the weather SD worker did not reach a safe idle).
+  if (!requestDevicePowerOff()) {
+    powerOffChoiceBusy = false;
+    showAppMenu(false);
+    showPowerOffSelector();
+    if (powerOffMessageLabel)
+      lv_label_set_text(powerOffMessageLabel, tr(STR_POWER_OFF_BUSY));
+  }
+}
+
+// Launcher gestures must not page or dismiss the menu while a modal is open.
+void appMenuGestureEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+  if (powerOffModalVisible() || clockModeModalVisible()) {
+    gestureStartX = -1;
+    gestureStartY = -1;
+    return;
+  }
+  mainUiGestureEvent(event);
 }
 
 void updateAppMenuPageVisibility() {
@@ -147,6 +236,7 @@ void hideAppMenu(bool fade) {
   appMenuHideRequested = false;
   appMenuShowRequested = false;
   if (clockModeSelector) lv_obj_add_flag(clockModeSelector, LV_OBJ_FLAG_HIDDEN);
+  hidePowerOffSelector();
   lv_obj_add_flag(appMenu, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -337,13 +427,12 @@ void appMenuItemEvent(lv_event_t *event) {
   // swipe. The menu gesture handler arms this short release guard so paging
   // and launching an app remain two distinct actions.
   const uint32_t now = millis();
-  if (!appMenuVisible ||
-      (clockModeSelector &&
-       !lv_obj_has_flag(clockModeSelector, LV_OBJ_FLAG_HIDDEN)) ||
+  if (!appMenuVisible || deviceShuttingDown || powerOffModalVisible() ||
+      clockModeModalVisible() ||
       static_cast<int32_t>(now - appMenuClickSuppressedUntil) < 0) return;
   const AppMenuItem item = static_cast<AppMenuItem>(
     reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
-  if (item > APP_MENU_RADIO) return;
+  if (item > APP_MENU_POWER) return;
   // Guard every normal click too, not only a preceding swipe. CST9217 can
   // occasionally report another press after release, especially near a
   // rotation; without this lock the second sample could launch another tile.
@@ -373,6 +462,8 @@ void appMenuItemEvent(lv_event_t *event) {
     showAudiobookPage(true);
   } else if (item == APP_MENU_RADIO) {
     showRadioPage(true);
+  } else if (item == APP_MENU_POWER) {
+    showPowerOffSelector();
   } else {
     // The Settings tile exposes the same configuration page served over the
     // normal Wi-Fi connection, but through a predictable local hotspot.
@@ -627,6 +718,96 @@ void createClockModeSelector() {
   lv_obj_add_flag(clockModeSelector, LV_OBJ_FLAG_HIDDEN);
 }
 
+void createPowerOffSelector() {
+  powerOffSelector = lv_obj_create(appMenu);
+  lv_obj_remove_style_all(powerOffSelector);
+  lv_obj_set_size(powerOffSelector, APP_MENU_SIZE, APP_MENU_SIZE);
+  lv_obj_set_pos(powerOffSelector, 0, 0);
+  lv_obj_set_style_bg_color(powerOffSelector, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(powerOffSelector, LV_OPA_90, 0);
+  lv_obj_clear_flag(powerOffSelector, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(powerOffSelector, LV_OBJ_FLAG_CLICKABLE);
+
+  lv_obj_t *panel = lv_obj_create(powerOffSelector);
+  lv_obj_set_size(panel, 420, 360);
+  lv_obj_center(panel);
+  lv_obj_set_style_radius(panel, 38, 0);
+  lv_obj_set_style_bg_color(panel, lv_color_hex(themeSurface(0x0D0D0D)), 0);
+  lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(panel, 1, 0);
+  lv_obj_set_style_border_color(panel, lv_color_hex(themeBorder(0xFFFFFF)), 0);
+  lv_obj_set_style_border_opa(panel, themeIsAmber() ? LV_OPA_COVER : LV_OPA_20, 0);
+  lv_obj_set_style_pad_all(panel, 0, 0);
+  lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *title = lv_label_create(panel);
+  i18nRegister(title, STR_POWER_OFF_QUESTION);
+  lv_obj_set_style_text_font(title, &lv_font_ui_28, 0);
+  lv_obj_set_style_text_color(title, themeText(), 0);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 24);
+
+  powerOffMessageLabel = lv_label_create(panel);
+  lv_obj_set_width(powerOffMessageLabel, 380);
+  lv_label_set_long_mode(powerOffMessageLabel, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_align(powerOffMessageLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(powerOffMessageLabel, &lv_font_ui_18, 0);
+  lv_obj_set_style_text_color(powerOffMessageLabel, themeTextDim(0xCBD5E1), 0);
+  lv_obj_align(powerOffMessageLabel, LV_ALIGN_TOP_MID, 0, 82);
+
+  lv_obj_t *cancel = lv_btn_create(panel);
+  lv_obj_set_pos(cancel, 40, 254);
+  lv_obj_set_size(cancel, 160, 64);
+  lv_obj_set_style_radius(cancel, 24, 0);
+  lv_obj_set_style_bg_color(cancel, lv_color_hex(themeSurface(0x1F2937)), 0);
+  lv_obj_set_style_bg_opa(cancel, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(cancel, 1, 0);
+  lv_obj_set_style_border_color(cancel, lv_color_hex(themeBorder(0x374151)), 0);
+  lv_obj_set_style_shadow_width(cancel, 0, 0);
+  lv_obj_add_event_cb(cancel, powerOffChoiceEvent, LV_EVENT_CLICKED,
+                      reinterpret_cast<void *>(0));
+  lv_obj_t *cancelLabel = lv_label_create(cancel);
+  i18nRegister(cancelLabel, STR_CANCEL);
+  lv_obj_set_style_text_font(cancelLabel, &lv_font_ui_22, 0);
+  lv_obj_set_style_text_color(cancelLabel, themeText(), 0);
+  lv_obj_center(cancelLabel);
+
+  powerOffConfirmButton = lv_btn_create(panel);
+  lv_obj_set_pos(powerOffConfirmButton, 220, 254);
+  lv_obj_set_size(powerOffConfirmButton, 160, 64);
+  lv_obj_set_style_radius(powerOffConfirmButton, 24, 0);
+  lv_obj_set_style_bg_color(powerOffConfirmButton,
+    lv_color_hex(themeAccent(UI_ACCENT_ROSE)), 0);
+  lv_obj_set_style_bg_opa(powerOffConfirmButton, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(powerOffConfirmButton, 1, 0);
+  lv_obj_set_style_border_color(powerOffConfirmButton,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+  lv_obj_set_style_border_opa(powerOffConfirmButton,
+    themeIsAmber() ? LV_OPA_COVER : LV_OPA_20, 0);
+  lv_obj_set_style_shadow_width(powerOffConfirmButton, 0, 0);
+  lv_obj_set_style_bg_opa(powerOffConfirmButton, LV_OPA_40, LV_STATE_DISABLED);
+  lv_obj_set_style_text_opa(powerOffConfirmButton, LV_OPA_40, LV_STATE_DISABLED);
+  lv_obj_add_event_cb(powerOffConfirmButton, powerOffChoiceEvent, LV_EVENT_CLICKED,
+                      reinterpret_cast<void *>(1));
+  lv_obj_t *confirmLabel = lv_label_create(powerOffConfirmButton);
+  i18nRegister(confirmLabel, STR_POWER_OFF);
+  lv_obj_set_style_text_font(confirmLabel, &lv_font_ui_22, 0);
+  lv_obj_set_style_text_color(confirmLabel,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+  lv_obj_center(confirmLabel);
+
+  lv_obj_t *close = lv_btn_create(panel);
+  lv_obj_set_size(close, 42, 42);
+  lv_obj_align(close, LV_ALIGN_TOP_RIGHT, -12, 10);
+  lv_obj_set_style_radius(close, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_opa(close, LV_OPA_TRANSP, 0);
+  lv_obj_add_event_cb(close, powerOffChoiceEvent, LV_EVENT_CLICKED,
+                      reinterpret_cast<void *>(2));
+  createOfficialTablerIcon(close, &tabler_x, themeIcon());
+
+  updatePowerOffMessage();
+  lv_obj_add_flag(powerOffSelector, LV_OBJ_FLAG_HIDDEN);
+}
+
 void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
   if (themeIsAmber()) {
     lv_obj_set_style_bg_color(button, lv_color_black(), LV_PART_MAIN);
@@ -781,7 +962,7 @@ void createAppMenu() {
   lv_obj_set_style_pad_all(appMenu, 0, 0);
   lv_obj_clear_flag(appMenu, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(appMenu, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_event_cb(appMenu, mainUiGestureEvent, LV_EVENT_GESTURE, nullptr);
+  lv_obj_add_event_cb(appMenu, appMenuGestureEvent, LV_EVENT_GESTURE, nullptr);
 
   for (uint8_t i = 0; i < 3; ++i) {
     appMenuPages[i] = lv_obj_create(appMenu);
@@ -824,6 +1005,10 @@ void createAppMenu() {
     appMenuPages[2], APP_MENU_RADIO, 0, UI_ACCENT_MINT);
   createTablerIcon(radioButton, TABLER_ICON_RADIO, 80,
     themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+  lv_obj_t *powerButton = createAppTile(
+    appMenuPages[2], APP_MENU_POWER, 1, UI_ACCENT_ROSE);
+  createTablerIcon(powerButton, TABLER_ICON_POWER, 80,
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
 
   for (uint8_t i = 0; i < 3; ++i) {
     appMenuPageDots[i] = lv_obj_create(appMenu);
@@ -836,6 +1021,7 @@ void createAppMenu() {
   }
   updateAppMenuPageVisibility();
   createClockModeSelector();
+  createPowerOffSelector();
   createWifiSetupPage();
 
   lv_obj_add_flag(appMenu, LV_OBJ_FLAG_HIDDEN);
@@ -886,6 +1072,43 @@ void refreshAppMenuTheme() {
         }
       }
     }
+  }
+  if (powerOffSelector) {
+    lv_obj_set_style_bg_color(powerOffSelector, lv_color_black(), 0);
+    lv_obj_t *panel = lv_obj_get_child(powerOffSelector, 0);
+    if (panel) {
+      lv_obj_set_style_bg_color(panel, lv_color_hex(themeSurface(0x0D0D0D)), 0);
+      lv_obj_set_style_border_color(panel, lv_color_hex(themeBorder(0xFFFFFF)), 0);
+      lv_obj_set_style_border_opa(panel,
+        themeIsAmber() ? LV_OPA_COVER : LV_OPA_20, 0);
+      const uint32_t childCount = lv_obj_get_child_cnt(panel);
+      for (uint32_t i = 0; i < childCount; ++i) {
+        lv_obj_t *child = lv_obj_get_child(panel, i);
+        if (child == powerOffMessageLabel) {
+          lv_obj_set_style_text_color(child, themeTextDim(0xCBD5E1), 0);
+        } else if (child == powerOffConfirmButton) {
+          lv_obj_set_style_bg_color(child,
+            lv_color_hex(themeAccent(UI_ACCENT_ROSE)), 0);
+          lv_obj_set_style_border_color(child,
+            themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+          lv_obj_set_style_border_opa(child,
+            themeIsAmber() ? LV_OPA_COVER : LV_OPA_20, 0);
+          if (lv_obj_get_child_cnt(child))
+            lv_obj_set_style_text_color(lv_obj_get_child(child, 0),
+              themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+        } else if (lv_obj_get_width(child) == 160) {
+          lv_obj_set_style_bg_color(child, lv_color_hex(themeSurface(0x1F2937)), 0);
+          lv_obj_set_style_border_color(child, lv_color_hex(themeBorder(0x374151)), 0);
+          if (lv_obj_get_child_cnt(child))
+            lv_obj_set_style_text_color(lv_obj_get_child(child, 0), themeText(), 0);
+        } else if (lv_obj_get_width(child) == 42 && lv_obj_get_child_cnt(child)) {
+          lv_obj_set_style_img_recolor(lv_obj_get_child(child, 0), themeIcon(), 0);
+        } else if (lv_obj_get_child_cnt(child) == 0) {
+          lv_obj_set_style_text_color(child, themeText(), 0);
+        }
+      }
+    }
+    updatePowerOffMessage();
   }
   if (wifiSetupPage) {
     lv_obj_set_style_bg_color(wifiSetupPage, themePageBackground(), 0);

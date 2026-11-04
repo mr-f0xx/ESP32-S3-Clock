@@ -265,6 +265,9 @@ uint8_t ntpAttempt = 0;
 uint32_t temporaryNtpWifiStartedAt = 0;
 bool pmuReady = false;
 bool lowPowerMode = false;
+// Set once the Power tile has been confirmed. Blocks re-entry into the UI,
+// standby and the main loop while the AXP2101 shutdown sequence runs.
+bool deviceShuttingDown = false;
 bool imageReloadRequested = false;
 bool imageClearRequested = false;
 uint8_t imageCount = 0;
@@ -495,6 +498,7 @@ void markUserActivity();
 void checkAutoSleep();
 uint8_t sleepBrightnessForCurrentTime();
 void enterLowPowerClockMode();
+bool requestDevicePowerOff();
 const lv_font_t *currentClockFont();
 void applyClockFont();
 void beginScreenFade(uint8_t fromBrightness);
@@ -581,6 +585,10 @@ void setup() {
 }
 
 void loop() {
+  if (deviceShuttingDown) {
+    delay(100);
+    return;
+  }
   pollPowerKey();
   serviceWeatherSerialCommands();
   if (lowPowerMode) {
