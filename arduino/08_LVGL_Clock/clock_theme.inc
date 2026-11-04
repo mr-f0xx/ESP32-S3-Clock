@@ -58,8 +58,14 @@ inline const ThemePalette &themePalette() {
 }
 
 inline bool themeIsAmber() { return uiTheme == UI_THEME_AMBER; }
+inline bool themeIsBlack() { return uiTheme == UI_THEME_BLACK; }
 inline bool themeIsRetro() { return uiTheme == UI_THEME_RETRO; }
 inline bool themeIsCyberpunk() { return uiTheme == UI_THEME_CYBERPUNK; }
+// True for the single-neon-accent palettes (retro / cyberpunk / aurora / ocean)
+// where every tile and control collapses onto one accent hue.
+inline bool themeIsNeon() {
+  return !themeIsBlack() && !themeIsAmber() && themePalette().monochromeAccent;
+}
 
 // Accent family (tiles, sliders, progress, charts). Amber collapses every accent
 // to the single phosphor hue; the black theme keeps the original per-app color.
@@ -90,6 +96,14 @@ inline lv_color_t themeTextDim(uint32_t normal) {
   return lv_color_hex(themePalette().dim);
 }
 inline lv_color_t themeIcon() { return themeText(); }
+
+// Readable text/icon color on top of a filled accent surface. Amber phosphor
+// and the bright neon accents need dark glyphs; the black theme keeps the
+// original per-app accents, which are mid-tone and read best with white.
+inline lv_color_t themeTextOnAccent() {
+  if (themeIsBlack()) return lv_color_white();
+  return lv_color_black();
+}
 
 // The default and CRT themes stay true black for the AMOLED panel; the newer
 // palettes use very dark tinted backgrounds so their neon traces read correctly.

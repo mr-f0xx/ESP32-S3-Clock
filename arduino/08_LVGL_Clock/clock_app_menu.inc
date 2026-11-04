@@ -691,12 +691,13 @@ lv_obj_t *createClockModeButton(lv_obj_t *parent, int16_t x,
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(button, themeIsAmber() ? 2 : 1, 0);
   lv_obj_set_style_border_color(button,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+    themeIsAmber() ? lv_color_hex(CRT_AMBER)
+                 : lv_color_hex(themeBorder(0xFFFFFF)), 0);
   lv_obj_set_style_border_opa(button, themeIsAmber() ? LV_OPA_COVER : LV_OPA_20, 0);
   lv_obj_add_event_cb(button, clockModeChoiceEvent, LV_EVENT_CLICKED,
                       reinterpret_cast<void *>(choice));
   createOfficialTablerIcon(button, icon,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+    themeIsAmber() ? lv_color_hex(CRT_AMBER) : themeTextOnAccent());
   return button;
 }
 
@@ -807,7 +808,8 @@ void createPowerOffSelector() {
   lv_obj_set_style_bg_opa(powerOffConfirmButton, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(powerOffConfirmButton, 1, 0);
   lv_obj_set_style_border_color(powerOffConfirmButton,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+    themeIsAmber() ? lv_color_hex(CRT_AMBER)
+                 : lv_color_hex(themeBorder(0xFFFFFF)), 0);
   lv_obj_set_style_border_opa(powerOffConfirmButton,
     themeIsAmber() ? LV_OPA_COVER : LV_OPA_20, 0);
   lv_obj_set_style_shadow_width(powerOffConfirmButton, 0, 0);
@@ -818,8 +820,7 @@ void createPowerOffSelector() {
   lv_obj_t *confirmLabel = lv_label_create(powerOffConfirmButton);
   i18nRegister(confirmLabel, STR_POWER_OFF);
   lv_obj_set_style_text_font(confirmLabel, &lv_font_ui_22, 0);
-  lv_obj_set_style_text_color(confirmLabel,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+  lv_obj_set_style_text_color(confirmLabel, themeTextOnAccent(), 0);
   lv_obj_center(confirmLabel);
 
   lv_obj_t *close = lv_btn_create(panel);
@@ -835,6 +836,14 @@ void createPowerOffSelector() {
   lv_obj_add_flag(powerOffSelector, LV_OBJ_FLAG_HIDDEN);
 }
 
+// Icon color for a launcher tile in the active theme. Neon palettes collapse
+// every accent to one hue; amber uses the phosphor trace; black keeps white.
+lv_color_t appTileIconColor(uint32_t accent) {
+  if (themeIsAmber()) return lv_color_hex(CRT_AMBER);
+  if (themeIsNeon()) return lv_color_hex(themeAccent(accent));
+  return lv_color_white();
+}
+
 void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
   if (themeIsAmber()) {
     lv_obj_set_style_bg_color(button, lv_color_black(), LV_PART_MAIN);
@@ -844,6 +853,26 @@ void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
     lv_obj_set_style_border_opa(button, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(button, lv_color_hex(CRT_AMBER),
+                              LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
+  } else if (themeIsNeon()) {
+    // Retro / cyberpunk / aurora / ocean: dark tinted tile, neon trace border
+    // and a soft accent glow so the launcher visibly adopts the palette.
+    lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0D0D12)),
+                              LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(button, 2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, lv_color_hex(themeAccent(color)),
+                                  LV_PART_MAIN);
+    lv_obj_set_style_border_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    // Only the palettes that define a glow color get a halo; aurora / ocean
+    // report no glow, and a width-16 shadow with color 0 would just be a
+    // faint black smudge on the AMOLED background.
+    lv_obj_set_style_shadow_width(button, themeHasGlow() ? 16 : 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_color(button, lv_color_hex(themeGlowColor()),
+                                  LV_PART_MAIN);
+    lv_obj_set_style_shadow_opa(button, LV_OPA_30, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(themeAccent(color)),
                               LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
   } else {
@@ -860,8 +889,7 @@ void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
   }
   if (lv_obj_get_child_cnt(button)) {
     lv_obj_t *icon = lv_obj_get_child(button, 0);
-    const lv_color_t iconColor =
-      themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white();
+    const lv_color_t iconColor = appTileIconColor(color);
     // Image tiles use img_recolor; the vector audiobook tile uses line/border
     // colors. Applying both is safe for either representation.
     lv_obj_set_style_img_recolor(icon, iconColor, 0);
@@ -896,8 +924,9 @@ void createTablerAppIcon(lv_obj_t *button, const lv_img_dsc_t *icon) {
   lv_obj_t *image = lv_img_create(button);
   lv_img_set_src(image, icon);
   lv_obj_center(image);
-  lv_obj_set_style_img_recolor(image,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+  // Neon palettes collapse every accent to one hue, so the tile's original
+  // color does not matter; pass 0 as the accent seed.
+  lv_obj_set_style_img_recolor(image, appTileIconColor(0), 0);
   lv_obj_set_style_img_recolor_opa(image, LV_OPA_COVER, 0);
   lv_obj_clear_flag(image, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 }
@@ -1026,34 +1055,34 @@ void createAppMenu() {
   lv_obj_t *audiobookButton = createAppTile(
     appMenuPages[1], APP_MENU_AUDIOBOOK, 3, UI_ACCENT_MINT);
   createTablerIcon(audiobookButton, TABLER_ICON_AUDIOBOOK, 80,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+    appTileIconColor(UI_ACCENT_MINT));
 
   lv_obj_t *radioButton = createAppTile(
     appMenuPages[2], APP_MENU_RADIO, 0, UI_ACCENT_MINT);
   createTablerIcon(radioButton, TABLER_ICON_RADIO, 80,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+    appTileIconColor(UI_ACCENT_MINT));
   lv_obj_t *powerButton = createAppTile(
     appMenuPages[2], APP_MENU_POWER, 1, UI_ACCENT_ROSE);
   createTablerIcon(powerButton, TABLER_ICON_POWER, 80,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+    appTileIconColor(UI_ACCENT_ROSE));
   lv_obj_t *worldButton = createAppTile(
     appMenuPages[2], APP_MENU_WORLD_CLOCK, 2, UI_ACCENT_BLUE);
   createTablerIcon(worldButton, TABLER_ICON_WORLD, 80,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+    appTileIconColor(UI_ACCENT_BLUE));
   lv_obj_t *photoButton = createAppTile(
     appMenuPages[2], APP_MENU_PHOTO_FRAME, 3, UI_ACCENT_VIOLET);
   createTablerIcon(photoButton, TABLER_ICON_PHOTO, 80,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+    appTileIconColor(UI_ACCENT_VIOLET));
   lv_obj_t *timerButton = createAppTile(
     appMenuPages[3], APP_MENU_TIMER, 0, UI_ACCENT_AMBER);
   createTablerIcon(timerButton, TABLER_ICON_TIMER, 80,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white());
+    appTileIconColor(UI_ACCENT_AMBER));
 
   for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
     appMenuPageDots[i] = lv_obj_create(appMenu);
     lv_obj_remove_style_all(appMenuPageDots[i]);
     lv_obj_set_style_radius(appMenuPageDots[i], LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(appMenuPageDots[i], lv_color_white(), 0);
+    lv_obj_set_style_bg_color(appMenuPageDots[i], themeText(), 0);
     lv_obj_align(appMenuPageDots[i], LV_ALIGN_BOTTOM_MID,
                  (static_cast<int16_t>(i) * 2 - (APP_MENU_PAGE_COUNT - 1)) * 9, -13);
     lv_obj_clear_flag(appMenuPageDots[i],
@@ -1102,16 +1131,18 @@ void refreshAppMenuTheme() {
         // label. Recolor the two large buttons and the close icon.
         if (lv_obj_get_width(child) == 156) {
           const bool amber = themeIsAmber();
+          const uint32_t keyAccent =
+            themeAccent(i == 1 ? UI_ACCENT_BLUE : UI_ACCENT_MINT);
           lv_obj_set_style_bg_color(child,
-            amber ? lv_color_black()
-                  : lv_color_hex(i == 1 ? UI_ACCENT_BLUE : UI_ACCENT_MINT), 0);
+            amber ? lv_color_black() : lv_color_hex(keyAccent), 0);
           lv_obj_set_style_border_width(child, amber ? 2 : 1, 0);
           lv_obj_set_style_border_color(child,
-            amber ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+            amber ? lv_color_hex(CRT_AMBER)
+                  : lv_color_hex(themeBorder(0xFFFFFF)), 0);
           lv_obj_set_style_border_opa(child, amber ? LV_OPA_COVER : LV_OPA_20, 0);
           if (lv_obj_get_child_cnt(child))
             lv_obj_set_style_img_recolor(lv_obj_get_child(child, 0),
-              amber ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+              amber ? lv_color_hex(CRT_AMBER) : themeTextOnAccent(), 0);
         }
       }
     }
@@ -1133,12 +1164,13 @@ void refreshAppMenuTheme() {
           lv_obj_set_style_bg_color(child,
             lv_color_hex(themeAccent(UI_ACCENT_ROSE)), 0);
           lv_obj_set_style_border_color(child,
-            themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+            themeIsAmber() ? lv_color_hex(CRT_AMBER)
+                         : lv_color_hex(themeBorder(0xFFFFFF)), 0);
           lv_obj_set_style_border_opa(child,
             themeIsAmber() ? LV_OPA_COVER : LV_OPA_20, 0);
           if (lv_obj_get_child_cnt(child))
             lv_obj_set_style_text_color(lv_obj_get_child(child, 0),
-              themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_white(), 0);
+              themeTextOnAccent(), 0);
         } else if (lv_obj_get_width(child) == 160) {
           lv_obj_set_style_bg_color(child, lv_color_hex(themeSurface(0x1F2937)), 0);
           lv_obj_set_style_border_color(child, lv_color_hex(themeBorder(0x374151)), 0);

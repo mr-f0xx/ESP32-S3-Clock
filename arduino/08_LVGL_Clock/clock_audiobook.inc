@@ -824,10 +824,10 @@ void createAudiobookPage(lv_obj_t *screen) {
   lv_obj_set_style_border_color(playButton, lv_color_hex(CRT_AMBER), LV_PART_MAIN);
   audiobookPlayIcon = lv_obj_get_child(playButton, lv_obj_get_child_cnt(playButton) - 1);
   audiobookPauseIcon = createTablerIcon(playButton, TABLER_ICON_PAUSE, 32,
-    themeIsAmber() ? lv_color_black() : lv_color_white());
+    themeTextOnAccent());
   if (audiobookPlayIcon)
     setTablerIconColor(audiobookPlayIcon,
-      themeIsAmber() ? lv_color_black() : lv_color_white());
+      themeTextOnAccent());
   lv_obj_add_flag(audiobookPauseIcon, LV_OBJ_FLAG_HIDDEN);
   createAudiobookControlButton(audiobookPage, 58, 88, 350, audiobookNextEvent,
                                TABLER_ICON_SKIP_FORWARD, 28);
@@ -871,7 +871,7 @@ void refreshAudiobookTheme() {
       lv_obj_set_style_border_color(child, lv_color_hex(CRT_AMBER), LV_PART_MAIN);
       for (uint32_t j = 0; j < lv_obj_get_child_cnt(child); ++j)
         setTablerIconColor(lv_obj_get_child(child, j),
-          themeIsAmber() ? lv_color_black() : lv_color_white());
+          themeTextOnAccent());
     } else {
       lv_obj_set_style_bg_color(child, lv_color_hex(themeSurface(0x0A0A0A)), LV_PART_MAIN);
       lv_obj_set_style_border_color(child, lv_color_hex(themeBorder(0x343846)), LV_PART_MAIN);

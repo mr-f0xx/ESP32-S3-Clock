@@ -65,6 +65,20 @@ const lv_font_t *currentClockFont() {
   }
 }
 
+// Compact 3-letter tag for the on-device font pill in the control panel.
+const char *clockFontShortName(uint8_t index) {
+  switch (index) {
+    case CLOCK_FONT_KAMERON: return "KAM";
+    case CLOCK_FONT_SILKSCREEN: return "SLK";
+    case CLOCK_FONT_DOTGOTHIC16: return "DOT";
+    case CLOCK_FONT_ORBITRON: return "ORB";
+    case CLOCK_FONT_AUDIOWIDE: return "AUD";
+    case CLOCK_FONT_CINZEL: return "CIN";
+    case CLOCK_FONT_BEBASNEUE: return "BEB";
+    default: return "MON";
+  }
+}
+
 bool clockFontHasTimeGlyphs(const lv_font_t *font) {
   if (!font) return false;
   lv_font_glyph_dsc_t digitDescriptor{};
@@ -209,9 +223,11 @@ void applyClockFont() {
   if (!timeLabel) return;
   const lv_font_t *font = currentClockFont();
   if (!clockFontHasTimeGlyphs(font)) {
-    Serial.println("Selected clock font is invalid; falling back to Montserrat");
+    Serial.printf("Clock font %u invalid; falling back to Montserrat\n",
+                  static_cast<unsigned>(clockFontIndex));
     clockFontIndex = CLOCK_FONT_MONTSERRAT;
     pendingClockFontIndex = CLOCK_FONT_MONTSERRAT;
+    preferences.putUChar("clock_font", clockFontIndex);
     font = lowPowerMode ? &lv_font_montserrat_time_96 : &lv_font_montserrat_48;
   }
   lv_obj_set_style_text_font(timeLabel, font, 0);
@@ -219,6 +235,10 @@ void applyClockFont() {
   timePanelWidth = 0;
   resizeTimePanelForText(displayedTimeText[0] ? displayedTimeText : "--:--");
   lv_obj_center(timeLabel);
+  Serial.printf("Clock font applied: %s (%s, %u px line)\n",
+                clockFontShortName(clockFontIndex),
+                lowPowerMode ? "standby" : "main",
+                static_cast<unsigned>(font->line_height));
 }
 
 void createClockUi() {
@@ -421,10 +441,18 @@ bool initDisplayAndLvgl() {
   logClockFontStatus("Kameron", &lv_font_kameron_48);
   logClockFontStatus("Silkscreen", &lv_font_silkscreen_48);
   logClockFontStatus("DotGothic16", &lv_font_dotgothic16_48);
+  logClockFontStatus("Orbitron", &lv_font_orbitron_48);
+  logClockFontStatus("Audiowide", &lv_font_audiowide_48);
+  logClockFontStatus("Cinzel", &lv_font_cinzel_48);
+  logClockFontStatus("BebasNeue", &lv_font_bebasneue_48);
   logClockFontStatus("Montserrat 96", &lv_font_montserrat_time_96);
   logClockFontStatus("Kameron 96", &lv_font_kameron_96);
   logClockFontStatus("Silkscreen 96", &lv_font_silkscreen_96);
   logClockFontStatus("DotGothic16 96", &lv_font_dotgothic16_96);
+  logClockFontStatus("Orbitron 96", &lv_font_orbitron_96);
+  logClockFontStatus("Audiowide 96", &lv_font_audiowide_96);
+  logClockFontStatus("Cinzel 96", &lv_font_cinzel_96);
+  logClockFontStatus("BebasNeue 96", &lv_font_bebasneue_96);
   constexpr uint16_t FALLBACK_DRAW_LINES = 40;
   const uint32_t fullScreenPixels =
     static_cast<uint32_t>(SCREEN_WIDTH) * SCREEN_HEIGHT;
