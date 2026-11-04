@@ -397,6 +397,9 @@ void loadSettings();
 void createControlPanel();
 void hideControlPanel(bool animated = true);
 void updateControlPanelStatus();
+// Declared here because clock_theme.inc (included before clock_ui.inc) calls it
+// from applyUiAppearance().
+void updateNetworkLabels();
 void syncControlPanelSettings();
 void processControlPanelTransition();
 void processControlPanelActions();

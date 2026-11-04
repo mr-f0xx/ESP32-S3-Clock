@@ -1,10 +1,14 @@
 # ESP32-S3 AMOLED LVGL Clock
 
+[![Build Firmware](https://github.com/mr-f0xx/ESP32-S3-Clock/actions/workflows/build-firmware.yml/badge.svg)](https://github.com/mr-f0xx/ESP32-S3-Clock/actions/workflows/build-firmware.yml)
+
 适用于 **ESP32-S3-Touch-AMOLED-2.16** 的 LVGL 桌面时钟固件，集成相册、动态天气壁纸、天气预报、视频与音乐播放、闹钟、日历、自动旋转和网页设置。
 
 > ## 快速下载
 >
 > **[下载 16 MB 固件](https://github.com/maxiumlee/ESP32-S3-LVGL-Clock/releases/latest/download/LVGL_Clock_16MB.merged.bin)** 　|　 **[浏览原始 JWP 天气壁纸](https://github.com/maxiumlee/ESP32-S3-LVGL-Clock/tree/main/tfcard/wallpaper)** 　|　 **[下载乐鑫官方烧录工具](https://www.espressif.com/en/tools-type/flash-download-tools)**
+>
+> 本仓库由 GitHub Actions 自动构建的固件见 **[Releases](https://github.com/mr-f0xx/ESP32-S3-Clock/releases/latest)**（文件名同为 `LVGL_Clock_16MB.merged.bin`）。
 >
 > 烧录只需要固件和官方工具；JWP 天气壁纸为可选下载，不需要安装 Arduino IDE、Python 或第三方烧录器。
 >
@@ -108,7 +112,8 @@ git clone https://github.com/maxiumlee/ESP32-S3-LVGL-Clock.git
 arduino/08_LVGL_Clock/     主程序源码
 arduino/libraries/         工程使用的固定版本依赖
 firmware/                  16 MB 合并固件
-scripts/                   固件构建脚本
+scripts/                   固件构建脚本（PowerShell / Bash）
+.github/workflows/         自动构建固件工作流
 tools/weather_ui_preview/  天气界面网页预览与坐标调整工具
 tools/wallpaper_builder/   MP4 转动态天气壁纸脚本
 tools/windows_converter/   普通视频转 MJPEG/WAV 工具
@@ -132,6 +137,60 @@ python tools/wallpaper_builder/build_playlist.py
 ```
 
 脚本读取 `media/source_mp4/*.mp4`，生成横屏和竖屏资源到 `tfcard/wallpaper`。转换完成的 JWP 通过 Git LFS 发布；大型源 MP4、音乐和普通视频不提交到仓库，可通过网盘或其他存储单独发布。
+
+## 7. 自动构建固件（GitHub Actions）
+
+[`.github/workflows/build-firmware.yml`](.github/workflows/build-firmware.yml) 使用 `arduino-cli` + **esp32:esp32 3.3.10** 编译固件，并直接产出台式烧录所需的 16 MB 合并镜像。
+
+**触发方式**
+
+| 事件 | 说明 |
+| --- | --- |
+| push 到 `main` | 修改 `arduino/**`、`scripts/**` 或工作流本身时自动编译 |
+| 推送 `v*` 标签 | 编译并自动创建/更新 GitHub Release |
+| Pull Request | 校验改动能通过编译 |
+| 手动运行 | Actions 页面 → Build Firmware → Run workflow |
+
+**编译参数**（与 `scripts/build_firmware.ps1`、`scripts/build_firmware.sh` 保持一致）
+
+```text
+FQBN: esp32:esp32:esp32s3:FlashSize=16M,PartitionScheme=custom,PSRAM=opi,CDCOnBoot=cdc
+```
+
+分区表使用 `arduino/08_LVGL_Clock/partitions.csv`（4 MB 应用 + 11.9 MB LittleFS），因此 `PartitionScheme=custom` 不可省略。
+
+**产物**
+
+- `LVGL_Clock_16MB.merged.bin`：16 MB 完整镜像，烧录地址 `0x0`
+- `LVGL_Clock_app.bin`：仅应用分区，烧录地址 `0x10000`
+- `SHA256SUMS.txt`、`BUILD_INFO.txt`：校验值与构建信息
+- 工作流运行页的 `LVGL_Clock_16MB-firmware` artifact（保留 30 天）
+
+CI 每次都会从 `clock_weather_config.example.h` 生成本地被忽略的 `clock_weather_config.h`，所以发布的固件不含个人天气 API Key，烧录后需在设备网页设置里重新填写 Wi-Fi 与和风天气。
+
+**发布带固件的 Release**
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+标签推送后工作流会自动编译，并把 `LVGL_Clock_16MB.merged.bin`、`LVGL_Clock_app.bin`、`SHA256SUMS.txt`、`BUILD_INFO.txt` 附加到同名 Release。
+
+**本地构建**
+
+```powershell
+# Windows
+powershell -ExecutionPolicy Bypass -File scripts/build_firmware.ps1
+```
+
+```bash
+# Linux / macOS
+arduino-cli core install esp32:esp32@3.3.10 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+scripts/build_firmware.sh
+```
+
+编译结果位于 `build/`，其中 `*.merged.bin` 即 16 MB 合并固件。
 
 ## 许可
 
