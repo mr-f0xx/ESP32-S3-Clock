@@ -2921,8 +2921,13 @@ void cancelAssetFade(bool restoreBrightness) {
   assetFadeFallbackAttempted = false;
   if (restoreBrightness) {
     setAssetFadeBrightness(activeBrightness);
-    if (!orientationTransitionBlanked) screenFadeTransitionActive = false;
   }
+  // A cancelled fade no longer owns the transition flag. Release it even when
+  // the caller restores brightness itself (page hidden / pipeline paused /
+  // standby); otherwise screenFadeTransitionActive stays latched true and the
+  // main loop's theme & font change gate is blocked forever, which is why the
+  // launcher tiles never re-themed after visiting the weather wallpaper.
+  if (!orientationTransitionBlanked) screenFadeTransitionActive = false;
 }
 
 void beginRequestedAssetFade() {
@@ -2951,7 +2956,9 @@ void beginRequestedAssetFade() {
 void serviceAssetFade() {
   if (assetFadeState == AssetFadeState::Idle) return;
   if (!weatherPageVisible || lowPowerMode) {
-    cancelAssetFade(false);
+    // Restore full brightness when the page is merely hidden; in standby the
+    // power manager owns the backlight, so leave it untouched there.
+    cancelAssetFade(!lowPowerMode);
     return;
   }
 
