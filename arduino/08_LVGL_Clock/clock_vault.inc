@@ -1,6 +1,9 @@
 // AES-256-GCM password vault + explicit, host-focused USB keyboard typing.
 #include "src/vault_crypto.h"
 #include <bootloader_random.h>
+#if !defined(CONFIG_TINYUSB_HID_ENABLED) || !CONFIG_TINYUSB_HID_ENABLED
+#error "Password vault USB typing requires CONFIG_TINYUSB_HID_ENABLED=y in the ESP32 Arduino core"
+#endif
 #if defined(CONFIG_TINYUSB_HID_ENABLED) && CONFIG_TINYUSB_HID_ENABLED
 #include <USBHIDKeyboard.h>
 #include "keyboardLayout/KeyboardLayout.h"
@@ -30,6 +33,12 @@ uint32_t vaultTypeNextAt = 0;
 
 bool vaultTypingActive() { return vaultTyping; }
 void vaultStatusText(const char *text) { if (vaultStatus) lv_label_set_text(vaultStatus, text); }
+void vaultClearField(lv_obj_t *field) {
+  if (!field) return;
+  char *text = const_cast<char *>(lv_textarea_get_text(field));
+  if (text) VaultCrypto::wipe(text, strlen(text));
+  lv_textarea_set_text(field, "");
+}
 void vaultHideKeyboard() {
   if (vaultKeyboard) { lv_obj_del(vaultKeyboard); vaultKeyboard = nullptr; }
 }
@@ -44,8 +53,8 @@ void vaultLock() {
   VaultCrypto::wipe(vaultKey, sizeof(vaultKey));
   VaultCrypto::wipe(vaultRecords, sizeof(vaultRecords));
   vaultCount = 0; vaultUnlocked = false; vaultEditIndex = 255;
-  if (vaultPinField) lv_textarea_set_text(vaultPinField, "");
-  if (vaultPassField) lv_textarea_set_text(vaultPassField, "");
+  vaultClearField(vaultPinField);
+  vaultClearField(vaultPassField);
   if (vaultListPanel) lv_obj_add_flag(vaultListPanel, LV_OBJ_FLAG_HIDDEN);
   if (vaultDetailPanel) lv_obj_add_flag(vaultDetailPanel, LV_OBJ_FLAG_HIDDEN);
   if (vaultEditPanel) lv_obj_add_flag(vaultEditPanel, LV_OBJ_FLAG_HIDDEN);
@@ -126,9 +135,10 @@ bool vaultUnlockOrCreate(bool create) {
     vaultRandom(vaultSalt, sizeof(vaultSalt));
     success = VaultCrypto::deriveKey(pin, strlen(pin), vaultSalt, VaultCrypto::KDF_ITERATIONS, vaultKey);
     if (success) {
-      plain[0] = '{'; plain[1] = '}';
+      const char empty[] = "{\"version\":1,\"records\":[]}";
+      memcpy(plain, empty, sizeof(empty) - 1);
       vaultUnlocked = true; vaultCount = 0;
-      success = vaultWriteEncrypted(plain, 2);
+      success = vaultWriteEncrypted(plain, sizeof(empty) - 1);
       if (!success) vaultUnlocked = false;
     }
   } else {
@@ -162,7 +172,7 @@ bool vaultUnlockOrCreate(bool create) {
     if (file) file.close();
   }
   VaultCrypto::wipe(plain, VaultCrypto::MAX_PLAINTEXT + 1); free(plain);
-  lv_textarea_set_text(vaultPinField, ""); vaultHideKeyboard();
+  vaultClearField(vaultPinField); vaultHideKeyboard();
   if (!success) {
     VaultCrypto::wipe(vaultKey, sizeof(vaultKey));
     const uint8_t next = min<uint8_t>(failures + 1, 20);
@@ -257,7 +267,7 @@ void vaultSaveEntryEvent(lv_event_t *) {
     vaultStatusText("Encrypted TF write failed; edit discarded"); return;
   }
   VaultCrypto::wipe(&previous, sizeof(previous));
-  lv_textarea_set_text(vaultPassField, ""); vaultHideKeyboard();
+  vaultClearField(vaultPassField); vaultHideKeyboard();
   lv_obj_add_flag(vaultEditPanel, LV_OBJ_FLAG_HIDDEN); vaultUpdateRows();
   vaultStatusText("Saved with AES-256-GCM; previous encrypted file kept as .bak");
 }
@@ -287,7 +297,7 @@ void vaultActionEvent(lv_event_t *event) {
   else if (action == 2) vaultLock();
   else if (action == 3 && vaultUnlocked) vaultShowEdit(255);
   else if (action == 4 && vaultUnlocked) vaultShowEdit(vaultSelected);
-  else if (action == 5) { vaultHideKeyboard(); lv_obj_add_flag(vaultEditPanel, LV_OBJ_FLAG_HIDDEN); if (vaultPassField) lv_textarea_set_text(vaultPassField, ""); }
+  else if (action == 5) { vaultHideKeyboard(); lv_obj_add_flag(vaultEditPanel, LV_OBJ_FLAG_HIDDEN); vaultClearField(vaultPassField); }
   else if (action == 6) { vaultHideKeyboard(); lv_obj_add_flag(vaultDetailPanel, LV_OBJ_FLAG_HIDDEN); }
   else if (action == 7 && vaultUnlocked) {
     vaultHideKeyboard(); lv_obj_clear_flag(vaultConfirmPanel, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(vaultConfirmPanel);

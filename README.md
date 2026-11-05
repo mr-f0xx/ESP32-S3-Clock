@@ -76,6 +76,10 @@ Get-FileHash .\LVGL_Clock_16MB.merged.bin -Algorithm SHA256
 
 Choose Digital Numbers, Rajdhani, Roboto Mono, or Neon Lines (in addition to the existing fonts) in the web page’s **Time font** selector, or cycle the font pill in the control center. Choose **Spectrum Glow** in the web page’s **Theme** selector, or cycle the theme pill to **SPC**. It gives every launcher tile its own colored icon, border, and halo; other themes remain unchanged.
 
+### Extension apps
+
+Six additional launcher pages provide Subsonic/Gonic streaming, stereo voice memos, an MPC-style sampler, original Game Boy (DMG), a privacy-preserving WiFi/RF HUD, and an AES-256-GCM password vault with confirmed USB keyboard typing. See **[the app guide and hardware-validation notes](docs/APPS.md)** for TF paths, controls, security limits and current device-testing status.
+
 ### Offline utilities
 
 The last launcher page contains a calculator, notes, and a stopwatch. The calculator evaluates operations left to right; **C** clears errors such as division by zero. Notes hold one note of up to 512 characters: tap **Save**, or use the back button to save before leaving. The note is stored unencrypted in device settings and survives restart; a full firmware erase can remove it. The stopwatch keeps running when you leave the app and can be paused or reset; its state is lost on restart.

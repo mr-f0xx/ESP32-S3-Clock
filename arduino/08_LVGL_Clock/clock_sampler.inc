@@ -30,7 +30,14 @@ bool samplerAllocate() {
   const uint32_t capacity = samplerBudget / SAMPLER_PADS / sizeof(int16_t);
   for (SamplerBank &bank : samplerBanks) {
     bank.samples = static_cast<int16_t *>(heap_caps_calloc(capacity, sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (!bank.samples) return false;
+    if (!bank.samples) {
+      for (SamplerBank &allocated : samplerBanks) {
+        if (allocated.samples) free(allocated.samples);
+        allocated = SamplerBank();
+      }
+      samplerBudget = 0;
+      return false;
+    }
     bank.capacity = capacity;
   }
   return true;
