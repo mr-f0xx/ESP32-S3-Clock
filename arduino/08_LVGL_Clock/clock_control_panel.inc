@@ -18,9 +18,11 @@ constexpr int16_t CONTROL_PANEL_BUTTON_HEIGHT = 130;
 constexpr int16_t CONTROL_PANEL_BUTTON_RADIUS = LV_RADIUS_CIRCLE;
 constexpr int16_t CONTROL_PANEL_WIFI_Y = 80;
 constexpr int16_t CONTROL_PANEL_BLUETOOTH_Y = 288;
-constexpr int16_t CONTROL_PANEL_SLIDER_Y = 36;
+// Start below the top pill row (pills occupy y 16..60) with enough clearance
+// for the slider knob at max value, so the knob can never cover a pill.
+constexpr int16_t CONTROL_PANEL_SLIDER_Y = 96;
 constexpr int16_t CONTROL_PANEL_SLIDER_WIDTH = 30;
-constexpr int16_t CONTROL_PANEL_SLIDER_HEIGHT = 350;
+constexpr int16_t CONTROL_PANEL_SLIDER_HEIGHT = 290;
 constexpr int16_t CONTROL_PANEL_BRIGHTNESS_X = 240;
 constexpr int16_t CONTROL_PANEL_VOLUME_X = 371;
 constexpr int16_t CONTROL_PANEL_GESTURE_EDGE = 72;

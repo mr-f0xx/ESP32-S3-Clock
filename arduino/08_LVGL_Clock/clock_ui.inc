@@ -38,6 +38,11 @@ void initUiFonts() {
   }
 }
 
+// True when the awake main page has no background image and therefore shows
+// the large centered "standby-style" clock on pure black instead of the small
+// top-left clock over a wallpaper.
+bool mainClockCentered = false;
+
 const lv_font_t *currentStandbyClockFont() {
   switch (clockFontIndex) {
     case CLOCK_FONT_KAMERON: return &lv_font_kameron_96;
@@ -52,7 +57,7 @@ const lv_font_t *currentStandbyClockFont() {
 }
 
 const lv_font_t *currentClockFont() {
-  if (lowPowerMode) return currentStandbyClockFont();
+  if (lowPowerMode || mainClockCentered) return currentStandbyClockFont();
   switch (clockFontIndex) {
     case CLOCK_FONT_KAMERON: return &lv_font_kameron_48;
     case CLOCK_FONT_SILKSCREEN: return &lv_font_silkscreen_48;
@@ -122,16 +127,17 @@ int16_t measureTimePanelWidth(const char *text) {
   lv_point_t textSize{};
   lv_txt_get_size(&textSize, text, currentClockFont(), 0, 0,
                   LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-  const int16_t horizontalPadding = lowPowerMode ? 32 : TIME_PANEL_HORIZONTAL_PADDING;
-  const int16_t minimumWidth = lowPowerMode ? 240 : TIME_PANEL_MIN_WIDTH;
-  const int16_t maximumWidth = lowPowerMode ? SCREEN_WIDTH - 16 : TIME_PANEL_MAX_WIDTH;
+  const bool large = lowPowerMode || mainClockCentered;
+  const int16_t horizontalPadding = large ? 32 : TIME_PANEL_HORIZONTAL_PADDING;
+  const int16_t minimumWidth = large ? 240 : TIME_PANEL_MIN_WIDTH;
+  const int16_t maximumWidth = large ? SCREEN_WIDTH - 16 : TIME_PANEL_MAX_WIDTH;
   return constrain(static_cast<int16_t>(textSize.x) + horizontalPadding * 2,
                    minimumWidth, maximumWidth);
 }
 
 void resizeTimePanelForText(const char *text) {
   const int16_t nextWidth = measureTimePanelWidth(text);
-  if (lowPowerMode) {
+  if (lowPowerMode || mainClockCentered) {
     timePanelWidth = nextWidth;
     const int16_t panelHeight = max(
       static_cast<int16_t>(currentClockFont()->line_height + 36),
@@ -228,7 +234,8 @@ void applyClockFont() {
     clockFontIndex = CLOCK_FONT_MONTSERRAT;
     pendingClockFontIndex = CLOCK_FONT_MONTSERRAT;
     preferences.putUChar("clock_font", clockFontIndex);
-    font = lowPowerMode ? &lv_font_montserrat_time_96 : &lv_font_montserrat_48;
+    font = (lowPowerMode || mainClockCentered) ? &lv_font_montserrat_time_96
+                                              : &lv_font_montserrat_48;
   }
   lv_obj_set_style_text_font(timeLabel, font, 0);
   applyClockColor();
@@ -237,8 +244,31 @@ void applyClockFont() {
   lv_obj_center(timeLabel);
   Serial.printf("Clock font applied: %s (%s, %u px line)\n",
                 clockFontShortName(clockFontIndex),
-                lowPowerMode ? "standby" : "main",
+                lowPowerMode ? "standby" : (mainClockCentered ? "centered" : "main"),
                 static_cast<unsigned>(font->line_height));
+}
+
+// Awake main page: with a wallpaper/album background keep the small top-left
+// clock over its scrim; with no background show the large centered clock on
+// pure black (no date), matching the standby look the user expects.
+void refreshMainClockLayout() {
+  if (!timePanel || !timeLabel || lowPowerMode) return;
+  const bool hasBackground =
+    backgroundImage && !lv_obj_has_flag(backgroundImage, LV_OBJ_FLAG_HIDDEN);
+  mainClockCentered = !hasBackground;
+  if (mainClockCentered) {
+    lv_obj_set_style_bg_color(lv_scr_act(), lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(timePanel, LV_OPA_TRANSP, 0);
+    if (timeBackground) lv_obj_add_flag(timeBackground, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_align(timePanel, LV_ALIGN_CENTER, 0, 0);
+  } else {
+    lv_obj_set_style_bg_color(lv_scr_act(), themePageBackground(), 0);
+    if (timeBackground) lv_obj_clear_flag(timeBackground, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_align(timePanel, LV_ALIGN_TOP_LEFT, 24, 24);
+  }
+  timePanelWidth = 0;
+  applyClockFont();
+  lv_obj_invalidate(lv_scr_act());
 }
 
 void createClockUi() {
@@ -283,6 +313,7 @@ void createClockUi() {
   lv_obj_set_style_text_align(timeLabel, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_center(timeLabel);
   lv_obj_move_foreground(timePanel);
+  refreshMainClockLayout();
 
   dateLabel = lv_label_create(screen);
   i18nRegister(dateLabel, STR_WAITING_NTP);
@@ -570,6 +601,13 @@ void setDisplayedTime(const char *text) {
 }
 
 void updateClock() {
+  // Re-evaluate the centered/top-left layout whenever a background image
+  // appears or disappears (cheap flag check; re-layout only on change).
+  if (!lowPowerMode && timePanel) {
+    const bool hasBackground =
+      backgroundImage && !lv_obj_has_flag(backgroundImage, LV_OBJ_FLAG_HIDDEN);
+    if (mainClockCentered == hasBackground) refreshMainClockLayout();
+  }
   if (!rtcReady || !rtcTimeValid) {
     setDisplayedTime("--:--");
     return;

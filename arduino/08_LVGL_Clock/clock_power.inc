@@ -449,6 +449,8 @@ void exitLowPowerClockMode() {
   lv_obj_clear_flag(timeLabel, LV_OBJ_FLAG_HIDDEN);
   lv_obj_clear_flag(timePanel, LV_OBJ_FLAG_HIDDEN);
   if (fsReady) loadBackgroundImage();
+  // Pick centered-big (no background) vs top-left (wallpaper) after wake.
+  refreshMainClockLayout();
 
   portalActive = false;
   ntpStarted = rtcCalibratedThisBoot;
