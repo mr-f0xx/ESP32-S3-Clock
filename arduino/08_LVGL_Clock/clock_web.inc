@@ -418,12 +418,16 @@ void handleClearImage() {
 void handleClockFont() {
   markUserActivity();
   const String value = server.arg("font");
-  if (value.length() != 1 || value[0] < '0' || value[0] >= '0' + CLOCK_FONT_COUNT) {
+  bool valid = !value.isEmpty() && value.length() <= 2;
+  for (size_t i = 0; i < value.length(); ++i)
+    if (!isDigit(value[i])) valid = false;
+  const long font = valid ? value.toInt() : -1;
+  if (font < 0 || font >= CLOCK_FONT_COUNT) {
     server.send(400, "text/plain; charset=utf-8", webResponseFrench() ? "Paramètres de police invalides" : "Invalid font parameters");
     return;
   }
 
-  pendingClockFontIndex = static_cast<uint8_t>(value[0] - '0');
+  pendingClockFontIndex = static_cast<uint8_t>(font);
   clockFontChangeRequested = true;
   server.send(200, "text/plain; charset=utf-8", webResponseFrench() ? "Police enregistrée" : "Font saved");
 }

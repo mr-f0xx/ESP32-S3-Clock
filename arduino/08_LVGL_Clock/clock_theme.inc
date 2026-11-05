@@ -10,6 +10,7 @@ enum UiTheme : uint8_t {
   UI_THEME_CYBERPUNK,
   UI_THEME_AURORA,
   UI_THEME_OCEAN,
+  UI_THEME_SPECTRUM,
   UI_THEME_COUNT
 };
 
@@ -51,6 +52,9 @@ static constexpr ThemePalette THEME_PALETTES[UI_THEME_COUNT] = {
   // Ocean: deep navy / bioluminescent blue.
   {0x000814, 0x001220, 0x023E8A, 0xCAF0F8, 0x6C8EA0,
    0x00B4D8, 0x000000, true},
+  // Spectrum: neutral surfaces with individually coloured launcher glows.
+  {0x050510, 0x10101B, 0x40405A, 0xF4F4FF, 0xA0A0B8,
+   0xFFFFFF, 0x000000, false},
 };
 
 inline const ThemePalette &themePalette() {
@@ -58,6 +62,7 @@ inline const ThemePalette &themePalette() {
 }
 
 inline bool themeIsAmber() { return uiTheme == UI_THEME_AMBER; }
+inline bool themeIsSpectrum() { return uiTheme == UI_THEME_SPECTRUM; }
 inline bool themeIsBlack() { return uiTheme == UI_THEME_BLACK; }
 inline bool themeIsRetro() { return uiTheme == UI_THEME_RETRO; }
 inline bool themeIsCyberpunk() { return uiTheme == UI_THEME_CYBERPUNK; }
@@ -101,7 +106,7 @@ inline lv_color_t themeIcon() { return themeText(); }
 // and the bright neon accents need dark glyphs; the black theme keeps the
 // original per-app accents, which are mid-tone and read best with white.
 inline lv_color_t themeTextOnAccent() {
-  if (themeIsBlack()) return lv_color_white();
+  if (themeIsBlack() || themeIsSpectrum()) return lv_color_white();
   return lv_color_black();
 }
 
@@ -127,6 +132,7 @@ inline const char *themeShortName() {
     case UI_THEME_CYBERPUNK: return "CYB";
     case UI_THEME_AURORA: return "AUR";
     case UI_THEME_OCEAN: return "OCN";
+    case UI_THEME_SPECTRUM: return "SPC";
     default: return "STD";
   }
 }

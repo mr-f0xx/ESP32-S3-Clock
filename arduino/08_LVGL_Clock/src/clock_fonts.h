@@ -22,6 +22,14 @@ extern const lv_font_t lv_font_cinzel_48;
 extern const lv_font_t lv_font_cinzel_96;
 extern const lv_font_t lv_font_bebasneue_48;
 extern const lv_font_t lv_font_bebasneue_96;
+extern const lv_font_t lv_font_digitalnumbers_48;
+extern const lv_font_t lv_font_digitalnumbers_96;
+extern const lv_font_t lv_font_rajdhani_48;
+extern const lv_font_t lv_font_rajdhani_96;
+extern const lv_font_t lv_font_robotomono_48;
+extern const lv_font_t lv_font_robotomono_96;
+extern const lv_font_t lv_font_neonlines_48;
+extern const lv_font_t lv_font_neonlines_96;
 extern const lv_font_t lv_font_inter_weather_52;
 extern const lv_font_t lv_font_montserrat_25;
 

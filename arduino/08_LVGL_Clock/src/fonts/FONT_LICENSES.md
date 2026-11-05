@@ -11,6 +11,10 @@ The generated LVGL bitmap subsets in this directory use these Google Fonts:
 - Audiowide (retro-futuristic clock face)
 - Cinzel (elegant serif clock face)
 - Bebas Neue (condensed clock face)
+- Digital Numbers (seven-segment clock face)
+- Rajdhani (geometric clock face)
+- Roboto Mono (monospaced clock face)
+- Neon Lines (a retro clock subset derived from Monoton)
 
 All of these source families are distributed under the SIL Open Font License 1.1.
 Only `0-9`, `:` and `-` were converted at 48 px and 96 px for the clock display.
@@ -32,3 +36,7 @@ upstream Montserrat Medium TTF.
 Source: https://github.com/google/fonts
 Montserrat: https://github.com/JulietaUla/Montserrat
 License: https://openfontlicense.org/open-font-license-official-text/
+
+The four new font sources are pinned at Google Fonts revision `eb20e9cf19d97cf579fa3867d729d4222d6c59e1`. Their individual copyright and OFL notices are included in [`licenses/clock_fonts`](../../../../licenses/clock_fonts). Regenerate with `tools/generate_clock_fonts.py` and `lv_font_conv` 1.5.3. Roboto Mono uses its source font default variable weight.
+
+Neon Lines is a converted subset of Monoton, renamed because Monoton is a reserved font name.
