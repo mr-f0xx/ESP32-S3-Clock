@@ -519,7 +519,7 @@ lv_obj_t *createControlButton(const ClockLayout::Rect &r,
                                lv_event_cb_t callback, lv_obj_t **icon) {
   lv_obj_t *button = lv_btn_create(controlPanel);
   setControlRect(button, r);
-  lv_obj_set_style_radius(button, ClockLayout::scale(22, SCREEN_WIDTH), 0);
+  lv_obj_set_style_radius(button, themeControlRadius(ClockLayout::scale(22, SCREEN_WIDTH)), 0);
   lv_obj_set_style_border_width(button, 1, 0);
   lv_obj_set_style_shadow_width(button, 0, 0);
   lv_obj_set_style_pad_all(button, 0, 0);
@@ -581,7 +581,7 @@ lv_obj_t *createControlPillButton(const ClockLayout::Rect &r, lv_event_cb_t call
                                   lv_obj_t **labelOut) {
   lv_obj_t *button = lv_btn_create(controlPanel);
   setControlRect(button, r);
-  lv_obj_set_style_radius(button, ClockLayout::scale(16, SCREEN_WIDTH), 0);
+  lv_obj_set_style_radius(button, themeControlRadius(ClockLayout::scale(16, SCREEN_WIDTH)), 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(button, 1, 0);
   lv_obj_set_style_shadow_width(button, 0, 0);
@@ -590,9 +590,10 @@ lv_obj_t *createControlPillButton(const ClockLayout::Rect &r, lv_event_cb_t call
   lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *label = lv_label_create(button);
   lv_obj_set_width(label, r.w - 8);
+  lv_obj_set_height(label, r.h - 8);
   lv_obj_set_style_text_font(label, &lv_font_ui_16, 0);
   lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-  lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+  lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
   lv_obj_center(label);
   *labelOut = label;
   return button;
@@ -600,26 +601,29 @@ lv_obj_t *createControlPillButton(const ClockLayout::Rect &r, lv_event_cb_t call
 
 void updateControlPillLabels() {
   char text[48];
-  if (languageControlLabel)
-    lv_label_set_text(languageControlLabel, uiLanguage == UI_LANG_FR ? "Langue FR" : "Lang EN");
+  const char *prefix = themeLabelPrefix();
+  if (languageControlLabel) {
+    snprintf(text, sizeof(text), "%s%s", prefix, uiLanguage == UI_LANG_FR ? "Langue FR" : "Lang EN");
+    lv_label_set_text(languageControlLabel, text);
+  }
   if (themeControlLabel) {
-    snprintf(text, sizeof(text), "%s %s", tr(STR_THEME), themeShortName());
+    snprintf(text, sizeof(text), "%s%s %s", prefix, tr(STR_THEME), themeShortName());
     lv_label_set_text(themeControlLabel, text);
   }
   if (colorControlLabel) {
     static const char *const colorNames[CLOCK_COLOR_COUNT] = {"THM", "WHT", "AMB", "CYN", "PNK", "MNT", "GLD", "ICE", "RED"};
-    snprintf(text, sizeof(text), "%s %s", tr(STR_CLOCK_COLOR),
+    snprintf(text, sizeof(text), "%s%s %s", prefix, tr(STR_CLOCK_COLOR),
              colorNames[clockColorIndex < CLOCK_COLOR_COUNT ? clockColorIndex : 0]);
     lv_label_set_text(colorControlLabel, text);
   }
   if (fontControlLabel) {
-    snprintf(text, sizeof(text), "%s %s", tr(STR_CLOCK_FONT),
+    snprintf(text, sizeof(text), "%s%s %s", prefix, tr(STR_CLOCK_FONT),
              clockFontShortName(clockFontChangeRequested ? pendingClockFontIndex : clockFontIndex));
     lv_label_set_text(fontControlLabel, text);
   }
   if (sizeControlLabel) {
     const uint8_t size = clockSizeChangeRequested ? pendingClockSizeIndex : clockSizeIndex;
-    snprintf(text, sizeof(text), "%s %c", tr(STR_CLOCK_SIZE), clockSizeShortName(size)[0]);
+    snprintf(text, sizeof(text), "%s%s %c", prefix, tr(STR_CLOCK_SIZE), clockSizeShortName(size)[0]);
     lv_label_set_text(sizeControlLabel, text);
   }
 }
@@ -642,11 +646,13 @@ lv_obj_t *createControlSlider(const ClockLayout::Rect &r, int32_t value,
 }
 
 lv_obj_t *createControlLabel(const ClockLayout::Rect &r, const char *text,
-                             const lv_font_t *font, bool centered = false) {
+                             const lv_font_t *font, bool centered = false,
+                             lv_label_long_mode_t longMode = LV_LABEL_LONG_WRAP) {
   lv_obj_t *label = lv_label_create(controlPanel);
   setControlRect(label, r);
   lv_label_set_text(label, text);
-  lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+  // DOT keeps both the width and height fixed; WRAP can grow past a short row.
+  lv_label_set_long_mode(label, longMode);
   lv_obj_set_style_text_font(label, font, 0);
   lv_obj_set_style_text_align(label, centered ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, 0);
   lv_obj_set_style_bg_opa(label, LV_OPA_TRANSP, 0);
@@ -689,13 +695,16 @@ void createControlPanel() {
   wifiControlButton = createControlButton(l.wifi, &tabler_wifi, wifiControlEvent, &wifiControlIcon);
   // These status labels sit beside, not below, the native 40 px icon.
   lv_obj_set_pos(wifiControlIcon, l.wifiIcon.x - l.wifi.x, l.wifiIcon.y - l.wifi.y);
-  wifiControlStatus = createControlLabel(l.wifiStatus, "--", &lv_font_ui_18, true);
-  wifiControlIp = createControlLabel(l.wifiIp, "--", &lv_font_ui_16, true);
+  wifiControlStatus = createControlLabel(l.wifiStatus, "--", &lv_font_ui_18,
+                                         false, LV_LABEL_LONG_DOT);
+  wifiControlIp = createControlLabel(l.wifiIp, "--", &lv_font_ui_16,
+                                     false, LV_LABEL_LONG_DOT);
   bluetoothControlButton = createControlButton(l.rotation, &tabler_lock,
                                                 bluetoothControlEvent, &bluetoothControlIcon);
   lv_obj_set_pos(bluetoothControlIcon, l.rotationIcon.x - l.rotation.x,
                  l.rotationIcon.y - l.rotation.y);
-  bluetoothControlStatus = createControlLabel(l.rotationStatus, "--", &lv_font_ui_18, true);
+  bluetoothControlStatus = createControlLabel(l.rotationStatus, "--", &lv_font_ui_18,
+                                              false, LV_LABEL_LONG_DOT);
 
   brightnessSlider = createControlSlider(l.brightnessTrack, 25, brightnessControlEvent);
   volumeSlider = createControlSlider(l.volumeTrack, DEFAULT_AUDIO_VOLUME, volumeControlEvent);
@@ -741,6 +750,9 @@ void refreshControlPanelTheme() {
                          themeControlButton, sizeControlButton, controlCloseButton};
   for (lv_obj_t *button : buttons) {
     if (!button) continue;
+    lv_obj_set_style_radius(button,
+      button == controlCloseButton ? LV_RADIUS_CIRCLE
+                                   : themeControlRadius(ClockLayout::scale(16, SCREEN_WIDTH)), 0);
     lv_obj_set_style_bg_color(button, themeControlSurface(UI_ACCENT_BLUE), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_color(button, themeControlBorder(UI_ACCENT_BLUE), LV_PART_MAIN);
@@ -830,6 +842,10 @@ void updateControlPanelStatus() {
   const lv_color_t inactiveBorder = themeControlBorder(UI_ACCENT_BLUE);
   const lv_color_t activeTextColor = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
   const lv_color_t inactiveTextColor = themeTextDim(0x9299A3);
+  lv_obj_set_style_radius(wifiControlButton,
+    themeControlRadius(ClockLayout::scale(22, SCREEN_WIDTH)), 0);
+  lv_obj_set_style_radius(bluetoothControlButton,
+    themeControlRadius(ClockLayout::scale(22, SCREEN_WIDTH)), 0);
   if (displayedWifiEnabled != static_cast<int8_t>(wifiUserEnabled)) {
     displayedWifiEnabled = wifiUserEnabled;
     lv_obj_set_style_bg_color(wifiControlButton,

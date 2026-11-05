@@ -5,6 +5,7 @@
 constexpr uint8_t EXT_SUBSONIC = 0, EXT_RECORDER = 1, EXT_GAMEBOY = 2,
                   EXT_WIFI_HUD = 3, EXT_SAMPLER = 4, EXT_VAULT = 5;
 lv_obj_t *extensionPages[EXTENSION_APP_COUNT] = {};
+lv_obj_t *extensionBackButtons[EXTENSION_APP_COUNT] = {};
 bool extensionVisible[EXTENSION_APP_COUNT] = {};
 bool extensionShowRequested[EXTENSION_APP_COUNT] = {};
 bool extensionHideRequested[EXTENSION_APP_COUNT] = {};
@@ -49,7 +50,7 @@ lv_obj_t *extButton(lv_obj_t *parent, const char *text, int x, int y,
   lv_obj_t *button = lv_btn_create(parent);
   lv_obj_set_pos(button, x, y);
   lv_obj_set_size(button, w, h);
-  lv_obj_set_style_radius(button, 16, 0);
+  lv_obj_set_style_radius(button, themeControlRadius(16), 0);
   lv_obj_set_style_shadow_width(button, 0, 0);
   lv_obj_set_style_bg_color(button, primary ? color : themeControlSurface(extensionAccent), 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
@@ -113,8 +114,10 @@ lv_obj_t *extPage(uint8_t app, const char *title, uint32_t accent) {
   lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_flag(page, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(page, extensionPageGestureEvent, LV_EVENT_GESTURE, nullptr);
-  createAppBackButton(page, extBackEvent, accent);
-  lv_obj_t *label = extLabel(page, title, 96, 34, 360, 28);
+  extensionBackButtons[app] = createAppBackButton(page, extBackEvent, accent);
+  char heading[64];
+  snprintf(heading, sizeof(heading), "%s%s", themeLabelPrefix(), title);
+  lv_obj_t *label = extLabel(page, heading, 96, 34, 360, 28);
   lv_obj_set_height(label, 40);
   lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
   extensionPages[app] = page;
@@ -126,6 +129,7 @@ bool extSdReady() {
 void extDeletePage(uint8_t app) {
   if (extensionPages[app]) lv_obj_del(extensionPages[app]);
   extensionPages[app] = nullptr;
+  extensionBackButtons[app] = nullptr;
   extensionVisible[app] = false;
 }
 
@@ -254,10 +258,31 @@ void refreshExtensionThemes() {
       if (lv_obj_check_type(child, &lv_label_class))
         lv_obj_set_style_text_color(child, themeText(), 0);
       else if (lv_obj_check_type(child, &lv_btn_class)) {
+        lv_obj_set_style_radius(child, themeControlRadius(16), 0);
         lv_obj_set_style_bg_color(child, themeControlSurface(accents[i]), 0);
+        lv_obj_set_style_border_color(child, themeControlBorder(accents[i]), 0);
+        lv_obj_set_style_shadow_width(child, 0, 0);
         if (lv_obj_get_child_cnt(child))
           lv_obj_set_style_text_color(lv_obj_get_child(child, 0), themeText(), 0);
       }
+    }
+    // The Game Boy ROM picker is a full-screen nested panel, not a top-level
+    // control. Recolor it too and keep its shared back key above the picker.
+    if (i == EXT_GAMEBOY && gbList) {
+      lv_obj_set_style_bg_color(gbList, themePageBackground(), 0);
+      for (uint32_t c = 0; c < lv_obj_get_child_cnt(gbList); ++c) {
+        lv_obj_t *child = lv_obj_get_child(gbList, c);
+        if (lv_obj_check_type(child, &lv_label_class))
+          lv_obj_set_style_text_color(child, themeText(), 0);
+        else if (lv_obj_check_type(child, &lv_btn_class)) {
+          lv_obj_set_style_radius(child, themeControlRadius(16), 0);
+          lv_obj_set_style_bg_color(child, themeControlSurface(accents[i]), 0);
+          lv_obj_set_style_border_color(child, themeControlBorder(accents[i]), 0);
+          if (lv_obj_get_child_cnt(child))
+            lv_obj_set_style_text_color(lv_obj_get_child(child, 0), themeText(), 0);
+        }
+      }
+      if (extensionBackButtons[i]) lv_obj_move_foreground(extensionBackButtons[i]);
     }
   }
 }

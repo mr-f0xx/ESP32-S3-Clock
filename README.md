@@ -76,6 +76,15 @@ Get-FileHash .\LVGL_Clock_16MB.merged.bin -Algorithm SHA256
 
 Choose Digital Numbers, Rajdhani, Roboto Mono, or Neon Lines (in addition to the existing fonts) in the web page’s **Time font** selector, or cycle the font pill in the control center. Choose **Spectrum Glow** in the web page’s **Theme** selector, or cycle the theme pill to **SPC**. It gives every launcher tile its own colored icon, border, and halo; other themes remain unchanged.
 
+### Matrix, Tokyo Night, and Dracula themes
+
+The device web page and control-centre theme pill now include **Matrix Terminal**
+(`MTX`), **Tokyo Night** (`TKY`), and **Dracula** (`DRC`) alongside the existing
+themes. Matrix uses crisp green-on-black terminal panels and `> ` prompts;
+Tokyo Night and Dracula use their familiar dark editor palettes without neon
+halos. Saved theme IDs are preserved. See **[the theme guide](docs/THEMES.md)**
+for palettes and the related Game Boy back-button / Wi-Fi tile fixes.
+
 ### Extension apps
 
 Six additional launcher pages provide Subsonic/Gonic streaming, stereo voice memos, an MPC-style sampler, original Game Boy (DMG), a privacy-preserving WiFi/RF HUD, and an AES-256-GCM password vault with confirmed USB keyboard typing. See **[the app guide and hardware-validation notes](docs/APPS.md)** for TF paths, controls, security limits and current device-testing status.

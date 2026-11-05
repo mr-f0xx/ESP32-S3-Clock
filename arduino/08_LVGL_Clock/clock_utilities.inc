@@ -29,14 +29,14 @@ lv_obj_t *utilityButton(lv_obj_t *parent, const char *text, int x, int y,
   lv_obj_t *button = lv_btn_create(parent);
   lv_obj_set_pos(button, x, y);
   lv_obj_set_size(button, w, h);
-  lv_obj_set_style_radius(button, 14, 0);
+  lv_obj_set_style_radius(button, themeControlRadius(14), 0);
   lv_obj_set_style_shadow_width(button, 0, 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
   if (kind == 2) {
     lv_obj_set_style_bg_color(button, accent, 0);
     lv_obj_set_style_border_width(button, 0, 0);
   } else {
-    lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0A0A0F)), 0);
+    lv_obj_set_style_bg_color(button, themeControlSurface(utilityAccentColor()), 0);
     lv_obj_set_style_border_width(button, kind == 1 ? 2 : 1, 0);
     lv_obj_set_style_border_color(button,
       kind == 1 ? accent : lv_color_hex(themeBorder(0x2A3040)), 0);
@@ -59,7 +59,7 @@ lv_obj_t *utilityButton(lv_obj_t *parent, const char *text, int x, int y,
 void styleUtilityNote(lv_obj_t *note, lv_color_t accent) {
   lv_obj_set_style_bg_color(note, lv_color_hex(themeSurface(0x0A0A0F)), 0);
   lv_obj_set_style_bg_opa(note, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(note, 12, 0);
+  lv_obj_set_style_radius(note, themeControlRadius(12), 0);
   lv_obj_set_style_border_width(note, 1, 0);
   lv_obj_set_style_border_color(note, accent, 0);
   lv_obj_set_style_text_color(note, themeText(), 0);
@@ -82,7 +82,7 @@ void styleUtilityKeyboard(lv_obj_t *keyboard, lv_color_t accent) {
   lv_obj_set_style_text_color(keyboard, themeText(), LV_PART_ITEMS);
   lv_obj_set_style_border_color(keyboard, lv_color_hex(themeBorder(0x202634)), LV_PART_ITEMS);
   lv_obj_set_style_border_width(keyboard, 1, LV_PART_ITEMS);
-  lv_obj_set_style_radius(keyboard, 6, LV_PART_ITEMS);
+  lv_obj_set_style_radius(keyboard, themeControlRadius(6), LV_PART_ITEMS);
   lv_obj_set_style_shadow_width(keyboard, 0, LV_PART_ITEMS);
   lv_obj_set_style_bg_color(keyboard, accent, LV_PART_ITEMS | LV_STATE_CHECKED);
   lv_obj_set_style_text_color(keyboard, themeTextOnAccent(), LV_PART_ITEMS | LV_STATE_CHECKED);

@@ -930,11 +930,14 @@ void createPowerOffSelector() {
 lv_color_t appTileIconColor(uint32_t accent) {
   if (themeIsAmber()) return lv_color_hex(CRT_AMBER);
   if (themePerTileColors()) return lv_color_hex(accent);
-  if (themeIsNeon()) return lv_color_hex(themeAccent(accent));
+  if (themeIsNeon() || themeIsFlatDark()) return lv_color_hex(themeAccent(accent));
   return lv_color_white();
 }
 
 void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
+  // Reset the finish as well as the colors when cycling away from Matrix.
+  lv_obj_set_style_radius(button, themeIsMatrix() ? 4 : themeIsEditor() ? 16 : 38,
+                          LV_PART_MAIN);
   if (themeIsSpectrum()) {
     lv_obj_set_style_bg_color(button, lv_color_hex(0x10101B), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
@@ -987,7 +990,20 @@ void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
     lv_obj_set_style_bg_color(button, lv_color_hex(themeAccent(color)),
                               LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
+  } else if (themeIsFlatDark()) {
+    // Matrix uses squared terminal windows; Tokyo Night / Dracula use quiet
+    // editor panels. All three avoid the older neon border glow.
+    lv_obj_set_style_radius(button, themeIsMatrix() ? 4 : 16, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0D0D12)), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(button, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, lv_color_hex(themeBorder(color)), LV_PART_MAIN);
+    lv_obj_set_style_border_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(themeAccent(color)), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
   } else {
+    lv_obj_set_style_radius(button, 38, LV_PART_MAIN);
     lv_obj_set_style_bg_color(button, lv_color_hex(color), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(button, 1, LV_PART_MAIN);

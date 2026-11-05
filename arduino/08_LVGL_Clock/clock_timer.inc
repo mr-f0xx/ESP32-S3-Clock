@@ -221,7 +221,7 @@ lv_obj_t *createTimerTextButton(lv_obj_t *parent, const ClockLayout::Rect &r,
                                 const char *text, lv_event_cb_t callback, uintptr_t data) {
   lv_obj_t *button = lv_btn_create(parent);
   setTimerRect(button, r);
-  lv_obj_set_style_radius(button, ClockLayout::scale(18, SCREEN_WIDTH), 0);
+  lv_obj_set_style_radius(button, themeControlRadius(ClockLayout::scale(18, SCREEN_WIDTH)), 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(button, 1, 0);
   lv_obj_set_style_shadow_width(button, 0, 0);
@@ -343,6 +343,7 @@ void refreshTimerTheme() {
     if (lv_obj_check_type(child, &lv_label_class) && child != timerTimeLabel && child != timerStatusLabel)
       lv_obj_set_style_text_color(child, themeTextDim(0x9AA3B2), 0);
     if (!lv_obj_check_type(child, &lv_btn_class)) continue;
+    lv_obj_set_style_radius(child, themeControlRadius(ClockLayout::scale(18, SCREEN_WIDTH)), 0);
     lv_obj_set_style_bg_color(child, surface, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(child, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_color(child, border, LV_PART_MAIN);

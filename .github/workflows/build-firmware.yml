@@ -109,6 +109,8 @@ jobs:
         run: |
           bash tests/run_launcher_icons_test.sh
           bash tests/run_ui_regressions_test.sh
+          bash tests/run_themes_test.sh
+          bash tests/run_lvgl_ui_test.sh
           bash tests/run_clock_layout_test.sh
           bash tests/run_clock_fonts_test.sh
           bash tests/run_extension_apps_test.sh

@@ -37,6 +37,12 @@ static void testControl(int16_t w, int16_t h) {
   separated(l.wifi, l.rotation, "connectivity");
   separated(l.wifiIcon, l.wifiStatus, "wifi icon/status");
   separated(l.wifiStatus, l.wifiIp, "wifi status/ip");
+  // Both single-line rows must stay inside the card with a visible gutter.
+  assert(l.wifiStatus.x >= l.wifiIcon.right() + scale(8, w));
+  assert(l.wifiIp.y >= l.wifiStatus.bottom() + scale(4, h));
+  assert(l.wifiStatus.y >= l.wifi.y + scale(8, h));
+  assert(l.wifiIp.bottom() <= l.wifi.bottom() - scale(8, h));
+  assert(l.wifiIp.right() <= l.wifi.right() - scale(8, w));
   separated(l.rotationIcon, l.rotationStatus, "rotation icon/status");
   const Rect brightness = expanded(l.brightnessTrack, l.knobOverhang);
   const Rect volume = expanded(l.volumeTrack, l.knobOverhang);
@@ -56,6 +62,23 @@ static void testControl(int16_t w, int16_t h) {
   }
   separated(l.wifi, brightness, "wifi/brightness");
   separated(l.rotation, brightness, "rotation/brightness");
+}
+
+static void testGameboy(int16_t w, int16_t h) {
+  const Gameboy l = gameboy(w, h);
+  const Rect all[] = {l.back, l.title, l.subtitle, l.refresh, l.canvas};
+  for (const Rect &r : all) inside(r, w, h, "gameboy");
+  for (const Rect &r : l.roms) inside(r, w, h, "gameboy rom row");
+  assert(l.back.x >= scale(16, w) && l.back.y >= scale(16, h));
+  separated(l.back, l.title, "gameboy back/title");
+  separated(l.back, l.subtitle, "gameboy back/subtitle");
+  separated(l.back, l.canvas, "gameboy back/canvas");
+  separated(l.title, l.subtitle, "gameboy title/subtitle");
+  separated(l.subtitle, l.roms[0], "gameboy subtitle/roms");
+  for (uint8_t i = 0; i < 8; ++i) {
+    separated(l.roms[i], l.refresh, "gameboy rom/refresh");
+    if (i) separated(l.roms[i - 1], l.roms[i], "gameboy rom rows");
+  }
 }
 
 static void testTimer(int16_t w, int16_t h) {
@@ -141,14 +164,17 @@ int main() {
   assert(migrateTheme(255, false) == THEME_GLOW);
   for (uint8_t current = 0; current < THEME_COUNT; ++current) assert(migrateTheme(current, true) == current);
   assert(migrateTheme(THEME_COUNT, true) == THEME_GLOW);
+  static_assert(THEME_COUNT == 10, "additive theme IDs must stay stable");
+  assert(migrateTheme(7, true) == 7 && migrateTheme(8, true) == 8 && migrateTheme(9, true) == 9);
   assert(clockSizePixels(0) == 48 && clockSizePixels(1) == 72 && clockSizePixels(2) == 120);
   assert(normalizeClockSize(200) == CLOCK_SIZE_DEFAULT);
   const int16_t sizes[][2] = {{480, 480}, {600, 600}, {480, 360}, {360, 360}};
   for (const auto &size : sizes) {
     testControl(size[0], size[1]);
+    testGameboy(size[0], size[1]);
     testTimer(size[0], size[1]);
     testWeather(size[0], size[1]);
   }
-  std::puts("layout: control/timer/weather bounds, separation, theme migration and clock sizes OK");
+  std::puts("layout: control/Wi-Fi rows, Game Boy back button, timer/weather bounds, theme migration and clock sizes OK");
   return 0;
 }
