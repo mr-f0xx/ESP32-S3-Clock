@@ -879,13 +879,12 @@ void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
     lv_obj_set_style_bg_color(button, lv_color_hex(color), LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
   } else if (themeIsGlow()) {
-    // HiBy-style: graphite tile with a subtle edge and no tile halo — the neon
-    // glow lives on the icon itself (applied in the icon section below).
-    lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x262A33)), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(button, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(button, lv_color_hex(themeBorder(0x3A404C)), LV_PART_MAIN);
-    lv_obj_set_style_border_opa(button, LV_OPA_40, LV_PART_MAIN);
+    // Keep the full tile touch target, but let the true-black launcher show
+    // through: no gray card or outline behind the icon. Only the icon carries
+    // the neon halo; pressing the tile still gives colored touch feedback.
+    lv_obj_set_style_bg_color(button, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(button, lv_color_hex(color), LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
