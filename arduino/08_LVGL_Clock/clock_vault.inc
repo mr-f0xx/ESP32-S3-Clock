@@ -9,7 +9,7 @@
 #include "keyboardLayout/KeyboardLayout.h"
 // Global constructor registers the HID interface before Arduino main() starts
 // TinyUSB. CDC remains enabled for serial/upload; reports are never sent here.
-USBHIDKeyboard vaultKeyboard;
+USBHIDKeyboard vaultUsbKeyboard;
 #endif
 
 constexpr uint8_t VAULT_RECORD_LIMIT = 24;
@@ -45,7 +45,7 @@ void vaultHideKeyboard() {
 void vaultStopTyping() {
   vaultTyping = vaultTypePressed = false; vaultTypeIndex = 0;
 #if defined(CONFIG_TINYUSB_HID_ENABLED) && CONFIG_TINYUSB_HID_ENABLED
-  if (vaultKeyboardReady) vaultKeyboard.releaseAll();
+  if (vaultKeyboardReady) vaultUsbKeyboard.releaseAll();
 #endif
 }
 void vaultLock() {
@@ -274,9 +274,9 @@ void vaultSaveEntryEvent(lv_event_t *) {
 void vaultTypeConfirmed() {
   if (!vaultUnlocked || vaultSelected >= vaultCount) return;
 #if defined(CONFIG_TINYUSB_HID_ENABLED) && CONFIG_TINYUSB_HID_ENABLED
-  vaultKeyboard.begin(vaultFrenchLayout ? KeyboardLayout_fr_FR : KeyboardLayout_en_US);
-  vaultKeyboard.setShiftKeyReports(true);
-  if (!vaultKeyboard.ready()) { vaultStatusText("USB HID not ready - connect Type-C to the target host"); return; }
+  vaultUsbKeyboard.begin(vaultFrenchLayout ? KeyboardLayout_fr_FR : KeyboardLayout_en_US);
+  vaultUsbKeyboard.setShiftKeyReports(true);
+  if (!tud_hid_n_ready(0)) { vaultStatusText("USB HID not ready - connect Type-C to the target host"); return; }
   const char *password = vaultRecords[vaultSelected].password;
   const uint8_t *layout = vaultFrenchLayout ? KeyboardLayout_fr_FR : KeyboardLayout_en_US;
   for (const char *p = password; *p; ++p)
@@ -380,7 +380,7 @@ void createVaultPage() {
   extButton(vaultConfirmPanel, "Cancel", 24, 352, 432, 52, vaultActionEvent, 9);
   lv_obj_add_flag(vaultConfirmPanel, LV_OBJ_FLAG_HIDDEN);
 #if defined(CONFIG_TINYUSB_HID_ENABLED) && CONFIG_TINYUSB_HID_ENABLED
-  vaultKeyboard.begin(vaultFrenchLayout ? KeyboardLayout_fr_FR : KeyboardLayout_en_US);
+  vaultUsbKeyboard.begin(vaultFrenchLayout ? KeyboardLayout_fr_FR : KeyboardLayout_en_US);
   vaultKeyboardReady = true;
 #endif
 }
@@ -389,7 +389,7 @@ void serviceVault() {
   if (vaultUnlocked && !vaultTyping && millis() - lastUserActivityAt > 120000) { vaultLock(); return; }
   if (!vaultTyping) return;
 #if defined(CONFIG_TINYUSB_HID_ENABLED) && CONFIG_TINYUSB_HID_ENABLED
-  if (!vaultUnlocked || vaultSelected >= vaultCount || !vaultKeyboard.ready()) {
+  if (!vaultUnlocked || vaultSelected >= vaultCount || !tud_hid_n_ready(0)) {
     vaultStopTyping(); vaultStatusText("Typing stopped: locked or USB disconnected"); return;
   }
   if (static_cast<int32_t>(millis() - vaultTypeNextAt) < 0) return;
@@ -399,7 +399,7 @@ void serviceVault() {
     vaultStopTyping(); vaultStatusText("Password typed; all keys released"); return;
   }
   const uint8_t character = password[vaultTypeIndex];
-  const size_t result = vaultTypePressed ? vaultKeyboard.release(character) : vaultKeyboard.press(character);
+  const size_t result = vaultTypePressed ? vaultUsbKeyboard.release(character) : vaultUsbKeyboard.press(character);
   if (!result) { vaultStopTyping(); vaultStatusText("Typing aborted: USB report / layout error"); return; }
   if (vaultTypePressed) ++vaultTypeIndex;
   vaultTypePressed = !vaultTypePressed; vaultTypeNextAt = millis() + 12;
