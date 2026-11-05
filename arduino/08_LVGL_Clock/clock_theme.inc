@@ -151,6 +151,7 @@ void refreshWeatherTheme();
 void refreshWorldClockTheme();
 void refreshPhotoFrameTheme();
 void refreshTimerTheme();
+void refreshUtilityTheme();
 
 // Queue a full language/theme re-apply. The main loop performs it inside a
 // screen fade so the recolor is never visible as a partial repaint.
@@ -193,6 +194,7 @@ void applyUiAppearance() {
   refreshWorldClockTheme();
   refreshPhotoFrameTheme();
   refreshTimerTheme();
+  refreshUtilityTheme();
   // Dynamic content in the new language / colors.
   updateNetworkLabels();
   updateControlPanelStatus();

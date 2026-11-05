@@ -30,7 +30,10 @@ enum TablerIconKind : uint8_t {
   TABLER_ICON_POWER,
   TABLER_ICON_WORLD,
   TABLER_ICON_TIMER,
-  TABLER_ICON_STOP
+  TABLER_ICON_STOP,
+  TABLER_ICON_CALCULATOR,
+  TABLER_ICON_NOTES,
+  TABLER_ICON_STOPWATCH
 };
 
 void freeTablerLinePoints(lv_event_t *event) {
@@ -357,6 +360,36 @@ lv_obj_t *createTablerIcon(lv_obj_t *parent, TablerIconKind kind,
     case TABLER_ICON_STOP: {
       // Filled-look stop square (outlined to match the 2 px icon convention).
       addTablerOutline(layer, 6, 6, 12, 12, 2, size, color);
+      break;
+    }
+    case TABLER_ICON_CALCULATOR: {
+      // Tabler calculator.svg: rounded body, a wide display window and a
+      // 3x2 keypad of dots.
+      addTablerOutline(layer, 4, 3, 16, 18, 2, size, color);
+      addTablerOutline(layer, 8, 7, 8, 3, 1, size, color);
+      addTablerDot(layer, 8, 14, 2, size, color);
+      addTablerDot(layer, 12, 14, 2, size, color);
+      addTablerDot(layer, 16, 14, 2, size, color);
+      addTablerDot(layer, 8, 17, 2, size, color);
+      addTablerDot(layer, 12, 17, 2, size, color);
+      addTablerDot(layer, 16, 17, 2, size, color);
+      break;
+    }
+    case TABLER_ICON_NOTES: {
+      // Tabler notes.svg: a page with three text rules, the last one short.
+      addTablerOutline(layer, 5, 3, 14, 18, 2, size, color);
+      addTablerSegment(layer, 9, 7, 15, 7, size, color);
+      addTablerSegment(layer, 9, 11, 15, 11, size, color);
+      addTablerSegment(layer, 9, 15, 13, 15, size, color);
+      break;
+    }
+    case TABLER_ICON_STOPWATCH: {
+      // Tabler stopwatch.svg: round body, top crown and a diagonal hand so it
+      // reads differently from the upright-hand timer tile.
+      addTablerOutline(layer, 5, 6, 14, 14, LV_RADIUS_CIRCLE, size, color);
+      addTablerSegment(layer, 10, 3, 14, 3, size, color);
+      addTablerSegment(layer, 12, 3, 12, 6, size, color);
+      addTablerSegment(layer, 12, 13, 15, 10, size, color);
       break;
     }
   }

@@ -1117,14 +1117,20 @@ void createAppMenu() {
   const char *utilityNames[] = {tr(STR_CALCULATOR), tr(STR_NOTES), tr(STR_STOPWATCH)};
   const AppMenuItem utilityItems[] = {APP_MENU_CALCULATOR, APP_MENU_NOTES, APP_MENU_STOPWATCH};
   const uint32_t utilityColors[] = {UI_ACCENT_BLUE, UI_ACCENT_MINT, UI_ACCENT_ROSE};
+  const TablerIconKind utilityIcons[] = {TABLER_ICON_CALCULATOR, TABLER_ICON_NOTES,
+                                         TABLER_ICON_STOPWATCH};
   for (uint8_t i = 0; i < 3; ++i) {
     lv_obj_t *tile = createAppTile(appMenuPages[3], utilityItems[i], i + 1, utilityColors[i]);
+    // Icon must be child 0 so applyAppTileTheme() recolors it on theme change.
+    lv_obj_t *icon = createTablerIcon(tile, utilityIcons[i], 64,
+                                      appTileIconColor(utilityColors[i]));
+    lv_obj_align(icon, LV_ALIGN_CENTER, 0, -20);
     lv_obj_t *label = lv_label_create(tile);
     utilityTileLabels[i] = label;
     lv_label_set_text(label, utilityNames[i]);
-    lv_obj_set_style_text_font(label, &lv_font_ui_20, 0);
+    lv_obj_set_style_text_font(label, &lv_font_ui_16, 0);
     lv_obj_set_style_text_color(label, appTileIconColor(utilityColors[i]), 0);
-    lv_obj_center(label);
+    lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -16);
   }
 
   for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
@@ -1167,7 +1173,7 @@ void refreshAppMenuTheme() {
     if (!utilityTileLabels[i]) continue;
     lv_label_set_text(utilityTileLabels[i], tr(utilityIds[i]));
     lv_obj_set_style_text_color(utilityTileLabels[i], appTileIconColor(themeIsSpectrum() ? SPECTRUM_TILE_COLORS[13 + i] : utilityColors[i]), 0);
-    lv_obj_center(utilityTileLabels[i]);
+    lv_obj_align(utilityTileLabels[i], LV_ALIGN_BOTTOM_MID, 0, -16);
   }
   for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
     if (appMenuPageDots[i])
