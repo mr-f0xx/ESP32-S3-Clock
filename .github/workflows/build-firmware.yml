@@ -10,11 +10,13 @@ on:
     paths:
       - "arduino/**"
       - "scripts/**"
+      - "tests/**"
       - ".github/workflows/build-firmware.yml"
   pull_request:
     paths:
       - "arduino/**"
       - "scripts/**"
+      - "tests/**"
       - ".github/workflows/build-firmware.yml"
   workflow_dispatch:
 
@@ -102,6 +104,9 @@ jobs:
             cp "$SKETCH_DIR/clock_weather_config.example.h" "$SKETCH_DIR/clock_weather_config.h"
             echo "Created $SKETCH_DIR/clock_weather_config.h from example template"
           fi
+
+      - name: Run launcher icon regression test
+        run: bash tests/run_launcher_icons_test.sh
 
       - name: Compile firmware
         run: |

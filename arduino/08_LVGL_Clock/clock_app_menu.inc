@@ -1,6 +1,7 @@
 // Full-screen app menu opened by swiping upward from the clock's bottom edge.
-// App icons use LVGL Alpha-8 assets generated from Tabler's official
-// 24x24, 2 px round-stroke artwork, scaled uniformly for the launcher.
+// App icons use LVGL Alpha-8 assets generated at their final launcher size
+// from Tabler's official 24x24, 2 px round-stroke artwork. Alpha-only images
+// must not be zoomed at runtime: the software transform path can drop them.
 // Sources: https://tabler.io/icons/icon/clock
 //          https://tabler.io/icons/icon/calendar
 //          https://tabler.io/icons/icon/alarm
@@ -30,12 +31,14 @@ bool powerOffChoiceBusy = false;
 uint32_t powerOffChoiceSuppressedUntil = 0;
 // Track the launcher tiles so a theme change can recolor every key without
 // rebuilding the menu. The base color is the per-app accent used in the black
-// theme; the amber theme turns each tile into a black, amber-outlined key.
+// theme; amber uses a translucent CRT-phosphor tint and Icon Glow uses a
+// translucent tint of each tile's own color.
 constexpr uint8_t APP_MENU_TILE_CAPACITY = 16;
 lv_obj_t *appMenuTileButtons[APP_MENU_TILE_CAPACITY] = {};
 uint32_t appMenuTileColors[APP_MENU_TILE_CAPACITY] = {};
 // Indexed by launcher tile creation order, including the three utility apps.
-// Each tile gets its own trace and halo instead of one theme-wide accent.
+// Each per-tile palette gets its own trace; Icon Glow also tints the tile
+// background with that same color instead of using one theme-wide accent.
 constexpr uint32_t SPECTRUM_TILE_COLORS[APP_MENU_TILE_CAPACITY] = {
   0xFFB020, 0xFF5C7A, 0xA8B6FF, 0x46A8FF,
   0x3FE0D0, 0xFF558F, 0xB57AFF, 0x53F0AA,
@@ -881,25 +884,25 @@ void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
     lv_obj_set_style_bg_color(button, lv_color_hex(color), LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
   } else if (themeIsGlow()) {
-    // Keep the full tile touch target, but let the true-black launcher show
-    // through: no gray card, outline or halo behind the icon. The icon keeps
-    // its neon color; pressing the tile still gives colored touch feedback.
-    lv_obj_set_style_bg_color(button, lv_color_black(), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_PART_MAIN);
+    // Keep the full tile touch target, but use a transparent tint of the
+    // icon's own color instead of a gray card. No outline or halo behind the
+    // icon; pressing the tile strengthens the same colored tint.
+    lv_obj_set_style_bg_color(button, lv_color_hex(color), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_20, LV_PART_MAIN);
     lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(button, lv_color_hex(color), LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(button, LV_OPA_40, LV_PART_MAIN | LV_STATE_PRESSED);
   } else if (themeIsAmber()) {
-    lv_obj_set_style_bg_color(button, lv_color_black(), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(button, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(button, lv_color_hex(CRT_AMBER), LV_PART_MAIN);
-    lv_obj_set_style_border_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    // CRT phosphor tint rather than a black card. Keep it translucent so the
+    // amber icon stays readable; pressing strengthens the same amber tint.
+    lv_obj_set_style_bg_color(button, lv_color_hex(CRT_AMBER), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_20, LV_PART_MAIN);
+    lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(button, lv_color_hex(CRT_AMBER),
                               LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(button, LV_OPA_40, LV_PART_MAIN | LV_STATE_PRESSED);
   } else if (themeIsNeon()) {
     // Retro / cyberpunk / aurora / ocean: dark tinted tile, neon trace border
     // and a soft accent glow so the launcher visibly adopts the palette.
@@ -974,14 +977,15 @@ void createTablerAppIcon(lv_obj_t *button, const lv_img_dsc_t *icon) {
   lv_obj_t *image = lv_img_create(button);
   lv_img_set_src(image, icon);
   lv_obj_center(image);
-  // lv_img_set_src() sets the pivot to the source center. Scaling around that
-  // pivot keeps the enlarged glyph centered without allocating a larger asset.
-  const lv_coord_t sourceSize = max(icon->header.w, icon->header.h);
-  lv_img_set_antialias(image, true);
-  lv_img_set_zoom(image, LV_IMG_ZOOM_NONE * APP_MENU_ICON_SIZE / sourceSize);
-  // Neon palettes collapse every accent to one hue, so the tile's original
-  // color does not matter; pass 0 as the accent seed.
-  lv_obj_set_style_img_recolor(image, appTileIconColor(0), 0);
+  // The launcher maps are generated at APP_MENU_ICON_SIZE. Never call
+  // lv_img_set_zoom() on these Alpha-8 sources: LVGL's software transform
+  // path does not reliably render alpha-only images and can hide the glyph.
+  // Match the tile color chosen by createAppTile() so per-tile palettes are
+  // correct immediately, before the first theme refresh.
+  const uint8_t tileIndex = appMenuTileCount - 1;
+  const uint32_t accent = themePerTileColors() ? SPECTRUM_TILE_COLORS[tileIndex]
+                                               : appMenuTileColors[tileIndex];
+  lv_obj_set_style_img_recolor(image, appTileIconColor(accent), 0);
   lv_obj_set_style_img_recolor_opa(image, LV_OPA_COVER, 0);
   lv_obj_clear_flag(image, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 }
@@ -1159,6 +1163,9 @@ void createAppMenu() {
   createClockModeSelector();
   createPowerOffSelector();
   createWifiSetupPage();
+  // Apply the persisted theme immediately so per-tile colors match their icons
+  // on cold boot, before any later theme-change refresh.
+  refreshAppMenuTheme();
 
   lv_obj_add_flag(appMenu, LV_OBJ_FLAG_HIDDEN);
   createCalendarPage(screen);
