@@ -338,6 +338,21 @@ void touchRead(lv_indev_drv_t *, lv_indev_data_t *data) {
         weatherTouchGestureStartY = gestureStartY;
       }
     }
+    // Fallback for scrollable widgets and pages whose children consume LVGL
+    // gestures. Weather has its own release-based gesture dispatcher.
+    if (touchCurrentlyPressed && !weatherPageVisible && !weatherInfoPageVisible &&
+        !controlPanelVisible && !controlPanelShowRequested && !appMenuShowRequested &&
+        !timerAlertVisible && !screenFadeTransitionActive && !orientationTransitionBlanked &&
+        gestureStartY >= 0 && gestureStartY <= CONTROL_PANEL_GESTURE_EDGE &&
+        gestureLastY >= 0 && gestureStartX >= 0 && gestureLastX >= 0) {
+      const int16_t dx = gestureLastX - gestureStartX;
+      const int16_t dy = gestureLastY - gestureStartY;
+      if (dy >= 30 && dy > abs(dx)) {
+        controlPanelHideRequested = false;
+        controlPanelShowRequested = true;
+        gestureStartX = gestureStartY = -1;
+      }
+    }
     touchCurrentlyPressed = false;
   }
 }

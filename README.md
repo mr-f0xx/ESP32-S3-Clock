@@ -66,6 +66,12 @@ Get-FileHash .\LVGL_Clock_16MB.merged.bin -Algorithm SHA256
 
 公开固件不包含个人天气 API Key。请勿把自己的 Key 提交到公开仓库。
 
+### Phone access and control center
+
+- With Wi-Fi enabled, open the clock's IP address on a phone connected to the same network. Alternatively, open **Settings** on the clock, connect the phone to `AMOLED-Clock-XXXXXX`, and visit **http://192.168.4.1** (not HTTPS). The open setup hotspot is temporary and closes when you leave Settings. If the phone switches away because the hotspot has no internet, choose to stay connected.
+- Swipe down from the top edge to open the control center, including from the launcher and app screens; swipe up from the bottom edge to close it. Dismiss an active timer alert first.
+- The web interface is intended for the local network, not direct exposure to the internet. Wi-Fi and the web server are off during low-power standby; they restart after waking when Wi-Fi is enabled.
+
 ## 3. 准备 TF 卡
 
 在 TF 卡根目录创建以下文件夹：

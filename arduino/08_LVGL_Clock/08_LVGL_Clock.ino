@@ -61,6 +61,7 @@ enum ClockFontId : uint8_t {
 
 constexpr uint16_t SCREEN_WIDTH = LCD_WIDTH;
 constexpr uint16_t SCREEN_HEIGHT = LCD_HEIGHT;
+constexpr int16_t CONTROL_PANEL_GESTURE_EDGE = 72;
 constexpr uint16_t WEATHER_VIDEO_HEIGHT = 360;
 constexpr size_t IMAGE_BYTES = static_cast<size_t>(SCREEN_WIDTH) * SCREEN_HEIGHT * 2;
 // Keep the CO5300 QSPI clock identical to the standalone 09 player. Calling
@@ -258,7 +259,8 @@ String weatherLocation = CLOCK_QWEATHER_LOCATION;
 bool weatherAutoLocationEnabled = true;
 char apSsid[32] = {};
 
-bool webServerStarted = false;
+bool webServerStarted = false;  // Routes have been registered.
+bool webServerListening = false;
 bool portalActive = false;
 bool ntpStarted = false;
 bool temporaryNtpWifi = false;
@@ -679,7 +681,7 @@ void loop() {
   servicePhotoFrame();
   serviceTimer();
 
-  if (webServerStarted && wifiUserEnabled) server.handleClient();
+  if (webServerListening && wifiUserEnabled) server.handleClient();
   if (portalActive) dnsServer.processNextRequest();
   updateRtcFromNtp();
 

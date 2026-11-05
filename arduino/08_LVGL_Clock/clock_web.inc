@@ -7,7 +7,7 @@ bool webResponseFrench() { return server.arg("lang") == "fr"; }
 void startConfigPortal() {
   if (!wifiUserEnabled) return;
   if (portalActive) {
-    if (!webServerStarted) startWebServer();
+    startWebServer();
     updateWifiSetupPage();
     return;
   }
@@ -24,7 +24,7 @@ void startConfigPortal() {
   delay(100);
   dnsServer.start(53, "*", WiFi.softAPIP());
   portalActive = true;
-  if (!webServerStarted) startWebServer();
+  startWebServer();
   updateNetworkLabels();
   updateWifiSetupPage();
   Serial.printf("Configuration AP: %s, http://%s\n", apSsid, WiFi.softAPIP().toString().c_str());
@@ -429,27 +429,30 @@ void handleClockFont() {
 }
 
 void startWebServer() {
-  if (!wifiUserEnabled || webServerStarted) return;
+  if (!wifiUserEnabled || webServerListening) return;
   Serial.println("Starting web server...");
-  server.on("/", HTTP_GET, [] { server.send_P(200, "text/html; charset=utf-8", CLOCK_WEB_PAGE); });
-  server.on("/status", HTTP_GET, handleStatus);
-  server.on("/save", HTTP_POST, handleSave);
-  server.on("/upload", HTTP_POST, finishImageUpload, handleImageUpload);
-  server.on("/clear-image", HTTP_POST, handleClearImage);
-  server.on("/font", HTTP_POST, handleClockFont);
-  server.on("/sleep-settings", HTTP_POST, handleSleepSettings);
-  server.on("/weather-settings", HTTP_POST, handleWeatherSettings);
-  server.on("/background-switch", HTTP_POST, handleBackgroundSwitchSettings);
-  server.on("/ui-settings", HTTP_POST, handleUiSettings);
-  server.on("/generate_204", HTTP_ANY, redirectToPortal);
-  server.on("/hotspot-detect.html", HTTP_ANY, redirectToPortal);
-  server.on("/fwlink", HTTP_ANY, redirectToPortal);
-  server.onNotFound([] {
-    if (portalActive) redirectToPortal();
-    else server.send(404, "text/plain", "Not found");
-  });
+  if (!webServerStarted) {
+    server.on("/", HTTP_GET, [] { server.send_P(200, "text/html; charset=utf-8", CLOCK_WEB_PAGE); });
+    server.on("/status", HTTP_GET, handleStatus);
+    server.on("/save", HTTP_POST, handleSave);
+    server.on("/upload", HTTP_POST, finishImageUpload, handleImageUpload);
+    server.on("/clear-image", HTTP_POST, handleClearImage);
+    server.on("/font", HTTP_POST, handleClockFont);
+    server.on("/sleep-settings", HTTP_POST, handleSleepSettings);
+    server.on("/weather-settings", HTTP_POST, handleWeatherSettings);
+    server.on("/background-switch", HTTP_POST, handleBackgroundSwitchSettings);
+    server.on("/ui-settings", HTTP_POST, handleUiSettings);
+    server.on("/generate_204", HTTP_ANY, redirectToPortal);
+    server.on("/hotspot-detect.html", HTTP_ANY, redirectToPortal);
+    server.on("/fwlink", HTTP_ANY, redirectToPortal);
+    server.onNotFound([] {
+      if (portalActive) redirectToPortal();
+      else server.send(404, "text/plain", "Not found");
+    });
+    webServerStarted = true;
+  }
   server.begin();
-  webServerStarted = true;
+  webServerListening = true;
   Serial.println("Web server ready");
 }
 

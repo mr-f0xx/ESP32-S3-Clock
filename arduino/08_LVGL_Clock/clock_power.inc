@@ -248,7 +248,8 @@ void enterLowPowerClockMode() {
 
   if (esp_sntp_enabled()) esp_sntp_stop();
   dnsServer.stop();
-  server.stop();
+  if (webServerListening) server.stop();
+  webServerListening = false;
   portalActive = false;
   if (uploadFile) uploadFile.close();
   WiFi.disconnect(true, false);

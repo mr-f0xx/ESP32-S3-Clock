@@ -25,7 +25,6 @@ constexpr int16_t CONTROL_PANEL_SLIDER_WIDTH = 30;
 constexpr int16_t CONTROL_PANEL_SLIDER_HEIGHT = 290;
 constexpr int16_t CONTROL_PANEL_BRIGHTNESS_X = 240;
 constexpr int16_t CONTROL_PANEL_VOLUME_X = 371;
-constexpr int16_t CONTROL_PANEL_GESTURE_EDGE = 72;
 bool controlPanelSuspendedWeather = false;
 bool controlPanelSuspendedMusic = false;
 bool controlPanelMusicWasPlaying = false;
@@ -63,8 +62,7 @@ void resumeControlPanelUnderlyingApp() {
 }
 
 void showControlPanel(bool fade = true) {
-  if (!controlPanel || lowPowerMode || controlPanelVisible || appMenuVisible ||
-      appMenuShowRequested) return;
+  if (!controlPanel || lowPowerMode || controlPanelVisible || appMenuShowRequested) return;
   if (fade) {
     if (controlPanelShowRequested) return;
     controlPanelHideRequested = false;
@@ -223,7 +221,8 @@ void mainUiGestureEvent(lv_event_t *event) {
   } else if (appMenuVisible && direction == LV_DIR_BOTTOM &&
              gestureStartY >= 0 && gestureStartY <= CONTROL_PANEL_GESTURE_EDGE) {
     gestureStartY = -1;
-    hideAppMenu(true);
+    appMenuClickSuppressedUntil = millis() + 350;
+    showControlPanel(true);
   }
 }
 
@@ -376,7 +375,8 @@ void setWifiUserEnabled(bool enabled, bool persist) {
     if (esp_sntp_enabled()) esp_sntp_stop();
     if (!rtcCalibratedThisBoot) ntpStarted = false;
     dnsServer.stop();
-    if (webServerStarted) server.stop();
+    if (webServerListening) server.stop();
+    webServerListening = false;
     portalActive = false;
     WiFi.disconnect(true, false);
     WiFi.mode(WIFI_OFF);
@@ -458,8 +458,7 @@ void processControlPanelActions() {
     Serial.printf("Wi-Fi connected from control panel: %s\n",
                   WiFi.localIP().toString().c_str());
     startNtp();
-    if (webServerStarted) server.begin();
-    else startWebServer();
+    startWebServer();
     updateNetworkLabels();
     updateControlPanelStatus();
   } else if (now - wifiControlConnectStartedAt >= WIFI_CONNECT_TIMEOUT_MS) {

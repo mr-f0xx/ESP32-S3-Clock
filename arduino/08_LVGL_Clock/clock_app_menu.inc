@@ -607,6 +607,13 @@ void appPageGestureEvent(lv_event_t *event) {
     // video and LVGL gesture bubbling cannot duplicate the physical gesture.
     return;
   }
+  if (direction == LV_DIR_BOTTOM && gestureStartY >= 0 &&
+      gestureStartY <= CONTROL_PANEL_GESTURE_EDGE) {
+    gestureStartX = -1;
+    gestureStartY = -1;
+    showControlPanel(true);
+    return;
+  }
   if (musicPlaylistVisible) {
     gestureStartX = -1;
     gestureStartY = -1;
