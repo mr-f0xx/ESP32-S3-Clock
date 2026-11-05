@@ -17,7 +17,7 @@ AudioFileSourceBuffer *subsonicBuffer = nullptr;
 void *subsonicBufferMemory = nullptr;
 AudioGenerator *subsonicGenerator = nullptr;
 void loadSubsonTracksSafe();
-bool loadSubsonTracks(bool search = false);
+bool loadSubsonicTracks(bool search = false);
 
 class SubsonicHttpSource : public AudioFileSource {
  public:
@@ -169,7 +169,7 @@ void updateSubsonicRows() {
     lv_label_set_text(subsonicTitle, subsonicCount ? subsonicTracks[subsonicIndex].title.c_str() : "No tracks loaded");
   }
 }
-bool loadSubsonicTracks(bool search = false) {
+bool loadSubsonicTracks(bool search) {
   JsonDocument document;
   String extra = "size=60";
   if (search && subsonicQuery.length()) {
@@ -278,7 +278,7 @@ void subsonicControlEvent(lv_event_t *event) {
   else if (action == 5) { if ((subsonicListPage + 1) * 6 < subsonicCount) ++subsonicListPage; updateSubsonicRows(); }
   else if (action == 6) loadSubsonTracksSafe();
 }
-void loadSubsonTracksSafe() { loadSubsonTracks(); }
+void loadSubsonTracksSafe() { loadSubsonicTracks(); }
 void subsonicSearchEvent(lv_event_t *) {
   if (subsonicSearchField) subsonicQuery = lv_textarea_get_text(subsonicSearchField);
   subsonicHideKeyboard(); loadSubsonicTracks(true);

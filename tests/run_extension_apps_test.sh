@@ -36,6 +36,8 @@ assert 'heap_caps_malloc' not in ext  # heavy buffers belong to individual apps
 capture = (root/'clock_capture.inc').read_text()
 assert 'PIN_ES7210_DIN' in capture and 'i2s_new_channel(&channel, nullptr, &captureRx)' in capture
 assert 'es7210_config_codec' in capture and 'stopMicrophoneCapture' in capture
+assert (root / 'src' / 'es7210.c').exists()
+assert 'loadSubsonicTracks' in (root / 'clock_subsonic.inc').read_text()
 sampler = (root/'clock_sampler.inc').read_text()
 assert 'SAMPLER_PADS = 16' in sampler and 'MALLOC_CAP_SPIRAM' in sampler
 assert 'samplerPitch' in sampler and 'samplerCutoff' in sampler and 'velocity' in sampler
