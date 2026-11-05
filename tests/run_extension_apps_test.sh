@@ -15,7 +15,8 @@ sketch = (root/'08_LVGL_Clock.ino').read_text()
 power = (root/'clock_power.inc').read_text()
 theme = (root/'clock_theme.inc').read_text()
 control = (root/'clock_control_panel.inc').read_text()
-assert 'APP_MENU_TILE_CAPACITY = 22' in menu and 'APP_MENU_PAGE_COUNT = 6' in menu
+assert 'APP_MENU_TILE_CAPACITY = 22' in menu
+assert 'APP_MENU_PAGE_COUNT = 6' in (root / '08_LVGL_Clock.ino').read_text()
 assert 'EXTENSION_APP_COUNT = 6' in menu
 for name in ['subsonic','recorder','gameboy','wifi_hud','sampler','vault']:
     assert f'#include "clock_{name}.inc"' in ext

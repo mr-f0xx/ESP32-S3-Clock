@@ -38,7 +38,6 @@ uint32_t powerOffChoiceSuppressedUntil = 0;
 // translucent tint of each tile's own color.
 constexpr uint8_t APP_MENU_TILE_CAPACITY = 22;
 constexpr uint8_t EXTENSION_APP_COUNT = 6;
-constexpr uint8_t APP_MENU_PAGE_COUNT = 6;
 lv_obj_t *appMenuTileButtons[APP_MENU_TILE_CAPACITY] = {};
 uint32_t appMenuTileColors[APP_MENU_TILE_CAPACITY] = {};
 // Indexed by launcher tile creation order, including the three utility apps.
