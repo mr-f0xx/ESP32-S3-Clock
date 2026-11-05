@@ -301,7 +301,7 @@ void createWorldClockPage(lv_obj_t *screen) {
 
   worldTimeLabel = lv_label_create(worldClockPage);
   lv_label_set_text(worldTimeLabel, "--:--");
-  lv_obj_set_style_text_font(worldTimeLabel, currentStandbyClockFont(), 0);
+  lv_obj_set_style_text_font(worldTimeLabel, &lv_font_montserrat_time_96, 0);
   lv_obj_set_style_text_color(worldTimeLabel, themeText(), 0);
   lv_obj_align(worldTimeLabel, LV_ALIGN_TOP_MID, -24, 150);
 

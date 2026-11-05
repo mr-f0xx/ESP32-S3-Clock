@@ -170,22 +170,16 @@ void refreshAudiobookBooklistStyles() {
   for (uint32_t i = 0; i < childCount; ++i) {
     lv_obj_t *row = lv_obj_get_child(audiobookBooklistList, i);
     const bool selected = i == audiobookTrackIndex;
-    if (themeIsAmber()) {
-      lv_obj_set_style_bg_color(row,
-        selected ? lv_color_hex(CRT_AMBER) : lv_color_black(), LV_PART_MAIN);
-      lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_PART_MAIN);
-      lv_obj_set_style_border_color(row, lv_color_hex(CRT_AMBER_FAINT), LV_PART_MAIN);
-    } else {
-      lv_obj_set_style_bg_color(row,
-        lv_color_hex(selected ? UI_ACCENT_MINT : 0x0D0D12), LV_PART_MAIN);
-      lv_obj_set_style_bg_opa(row, selected ? LV_OPA_COVER : LV_OPA_80, LV_PART_MAIN);
-      lv_obj_set_style_border_color(row,
-        lv_color_hex(selected ? 0x5EEAD4 : 0x282C37), LV_PART_MAIN);
-    }
+    lv_obj_set_style_bg_color(row,
+      selected ? lv_color_hex(themeAccent(UI_ACCENT_MINT))
+               : themeControlSurface(UI_ACCENT_MINT), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(row, selected ? LV_OPA_COVER : LV_OPA_80, LV_PART_MAIN);
+    lv_obj_set_style_border_color(row,
+      selected ? lv_color_hex(themeAccent(UI_ACCENT_MINT))
+               : themeControlBorder(UI_ACCENT_MINT), LV_PART_MAIN);
     if (lv_obj_get_child_cnt(row)) {
       lv_obj_set_style_text_color(lv_obj_get_child(row, 0),
-        themeIsAmber() ? (selected ? lv_color_black() : lv_color_hex(CRT_AMBER))
-                       : lv_color_white(), 0);
+        selected ? themeTextOnAccent() : themeText(), 0);
     }
   }
 }

@@ -732,7 +732,7 @@ void createClockModeSelector() {
   lv_obj_remove_style_all(clockModeSelector);
   lv_obj_set_size(clockModeSelector, APP_MENU_SIZE, APP_MENU_SIZE);
   lv_obj_set_pos(clockModeSelector, 0, 0);
-  lv_obj_set_style_bg_color(clockModeSelector, lv_color_black(), 0);
+  lv_obj_set_style_bg_color(clockModeSelector, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(clockModeSelector, LV_OPA_90, 0);
   lv_obj_clear_flag(clockModeSelector, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(clockModeSelector, LV_OBJ_FLAG_CLICKABLE);
@@ -777,7 +777,7 @@ void createPowerOffSelector() {
   lv_obj_remove_style_all(powerOffSelector);
   lv_obj_set_size(powerOffSelector, APP_MENU_SIZE, APP_MENU_SIZE);
   lv_obj_set_pos(powerOffSelector, 0, 0);
-  lv_obj_set_style_bg_color(powerOffSelector, lv_color_black(), 0);
+  lv_obj_set_style_bg_color(powerOffSelector, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(powerOffSelector, LV_OPA_90, 0);
   lv_obj_clear_flag(powerOffSelector, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(powerOffSelector, LV_OBJ_FLAG_CLICKABLE);
@@ -863,7 +863,7 @@ void createPowerOffSelector() {
 }
 
 // Icon color for a launcher tile in the active theme. Neon palettes collapse
-// every accent to one hue; amber uses the phosphor trace; black keeps white.
+// every accent to one hue; amber uses the phosphor trace.
 lv_color_t appTileIconColor(uint32_t accent) {
   if (themeIsAmber()) return lv_color_hex(CRT_AMBER);
   if (themePerTileColors()) return lv_color_hex(accent);
@@ -1191,7 +1191,7 @@ void refreshAppMenuTheme() {
       lv_obj_set_style_bg_color(appMenuPageDots[i], themeText(), 0);
   }
   if (clockModeSelector) {
-    lv_obj_set_style_bg_color(clockModeSelector, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(clockModeSelector, themePageBackground(), 0);
     // Rebuild the two mode keys' colors in place.
     lv_obj_t *panel = lv_obj_get_child(clockModeSelector, 0);
     if (panel) {
@@ -1223,7 +1223,7 @@ void refreshAppMenuTheme() {
     }
   }
   if (powerOffSelector) {
-    lv_obj_set_style_bg_color(powerOffSelector, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(powerOffSelector, themePageBackground(), 0);
     lv_obj_t *panel = lv_obj_get_child(powerOffSelector, 0);
     if (panel) {
       lv_obj_set_style_bg_color(panel, lv_color_hex(themeSurface(0x0D0D0D)), 0);

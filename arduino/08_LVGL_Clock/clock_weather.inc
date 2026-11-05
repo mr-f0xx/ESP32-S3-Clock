@@ -337,6 +337,9 @@ lv_obj_t *weatherInfoForecastDateLabels[3]{};
 lv_obj_t *weatherInfoForecastIcons[3]{};
 lv_obj_t *weatherInfoForecastTemperatureLabels[3]{};
 lv_obj_t *weatherInfoForecastConditionLabels[3]{};
+lv_obj_t *weatherInfoCards[6]{};
+lv_obj_t *weatherInfoDots[2][2]{};
+lv_obj_t *weatherInfoDivider = nullptr;
 lv_obj_t *weatherTrendLocationLabel = nullptr;
 lv_obj_t *weatherHourlyStatusLabel = nullptr;
 lv_obj_t *weatherHourlyChart = nullptr;
@@ -800,20 +803,19 @@ void createPage(lv_obj_t *screen) {
   lv_obj_add_flag(page, LV_OBJ_FLAG_HIDDEN);
 }
 
-lv_obj_t *createWeatherInfoCard(lv_obj_t *parent, int16_t x, int16_t y,
-                                int16_t width, int16_t height) {
+void setWeatherInfoRect(lv_obj_t *object, const ClockLayout::Rect &r) {
+  lv_obj_set_pos(object, r.x, r.y);
+  lv_obj_set_size(object, r.w, r.h);
+}
+
+lv_obj_t *createWeatherInfoCard(lv_obj_t *parent, const ClockLayout::Rect &r) {
   lv_obj_t *card = lv_obj_create(parent);
-  lv_obj_set_pos(card, x, y);
-  lv_obj_set_size(card, width, height);
-  lv_obj_set_style_radius(card, 24, 0);
-  lv_obj_set_style_bg_color(card, lv_color_hex(themeSurface(0x0A0A0A)), 0);
+  setWeatherInfoRect(card, r);
+  lv_obj_set_style_radius(card, ClockLayout::scale(20, SCREEN_WIDTH), 0);
   lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(card, 1, 0);
-  lv_obj_set_style_border_color(card, lv_color_hex(themeBorder(0x3A3A3A)), 0);
   lv_obj_set_style_pad_all(card, 0, 0);
   lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-  // Cards cover most of the screen. Bubble their gestures to the page so
-  // swiping from the current/forecast areas still opens controls or exits.
   lv_obj_add_flag(card, LV_OBJ_FLAG_GESTURE_BUBBLE);
   return card;
 }
@@ -922,8 +924,8 @@ void createWeatherInfoPageDots(lv_obj_t *parent, uint8_t activeIndex) {
   for (uint8_t i = 0; i < 2; ++i) {
     lv_obj_t *dot = lv_obj_create(parent);
     lv_obj_remove_style_all(dot);
-    lv_obj_set_pos(dot, 218 + i * 25, 465);
-    lv_obj_set_size(dot, 18, 4);
+    setWeatherInfoRect(dot, ClockLayout::weather(SCREEN_WIDTH, SCREEN_HEIGHT).dots[i]);
+    weatherInfoDots[activeIndex][i] = dot;
     lv_obj_set_style_radius(dot, 2, 0);
     lv_obj_set_style_bg_color(
       dot, i == activeIndex ? lv_color_white() : lv_color_hex(0x454545), 0);
@@ -937,12 +939,12 @@ void createInfoPage(lv_obj_t *screen) {
   lv_obj_remove_style_all(weatherInfoPage);
   lv_obj_set_pos(weatherInfoPage, 0, 0);
   lv_obj_set_size(weatherInfoPage, SCREEN_WIDTH, SCREEN_HEIGHT);
-  lv_obj_set_style_bg_color(weatherInfoPage, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(weatherInfoPage, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(weatherInfoPage, 0, 0);
   lv_obj_clear_flag(weatherInfoPage, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(weatherInfoPage, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_event_cb(weatherInfoPage, appPageGestureEvent, LV_EVENT_GESTURE,
-                      nullptr);
+  lv_obj_add_event_cb(weatherInfoPage, appPageGestureEvent, LV_EVENT_GESTURE, nullptr);
+  const ClockLayout::Weather l = ClockLayout::weather(SCREEN_WIDTH, SCREEN_HEIGHT);
 
   weatherInfoOverviewPage = lv_obj_create(weatherInfoPage);
   lv_obj_remove_style_all(weatherInfoOverviewPage);
@@ -951,106 +953,65 @@ void createInfoPage(lv_obj_t *screen) {
   lv_obj_clear_flag(weatherInfoOverviewPage, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(weatherInfoOverviewPage, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
-  weatherInfoLocationLabel = createWeatherInfoLabel(
-    weatherInfoOverviewPage, "--", &lv_font_ui_32, lv_color_white());
-  lv_obj_set_pos(weatherInfoLocationLabel, 37, 7);
-  lv_obj_set_width(weatherInfoLocationLabel, 267);
-  lv_obj_set_style_text_align(weatherInfoLocationLabel, LV_TEXT_ALIGN_LEFT, 0);
+  // The update time has its own bounded, wrapping top-right cell. It cannot
+  // overrun the location or the display edge in either language.
+  weatherInfoLocationLabel = createWeatherInfoLabel(weatherInfoOverviewPage, "--", &lv_font_ui_24, lv_color_white());
+  setWeatherInfoRect(weatherInfoLocationLabel, l.location);
   lv_label_set_long_mode(weatherInfoLocationLabel, LV_LABEL_LONG_DOT);
-
-  weatherInfoUpdatedLabel = createWeatherInfoLabel(
-    weatherInfoOverviewPage, tr(STR_WAITING_UPDATE), &lv_font_ui_22,
-    lv_color_hex(0x9299A3));
-  lv_obj_set_pos(weatherInfoUpdatedLabel, 314, 14);
-  lv_obj_set_width(weatherInfoUpdatedLabel, 136);
+  weatherInfoUpdatedLabel = createWeatherInfoLabel(weatherInfoOverviewPage, tr(STR_WAITING_UPDATE), &lv_font_ui_18, lv_color_white());
+  setWeatherInfoRect(weatherInfoUpdatedLabel, l.updated);
   lv_label_set_long_mode(weatherInfoUpdatedLabel, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_align(weatherInfoUpdatedLabel, LV_TEXT_ALIGN_RIGHT, 0);
 
-  lv_obj_t *currentCard = createWeatherInfoCard(
-    weatherInfoOverviewPage, 24, 50, 432, 176);
+  weatherInfoCards[0] = createWeatherInfoCard(weatherInfoOverviewPage, l.current);
+  lv_obj_t *currentCard = weatherInfoCards[0];
   weatherInfoCurrentIcon = lv_obj_create(currentCard);
   lv_obj_remove_style_all(weatherInfoCurrentIcon);
-  lv_obj_set_pos(weatherInfoCurrentIcon, 25, 23);
-  lv_obj_set_size(weatherInfoCurrentIcon, 72, 72);
-  lv_obj_clear_flag(weatherInfoCurrentIcon,
-                    LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+  setWeatherInfoRect(weatherInfoCurrentIcon, l.icon);
+  lv_obj_clear_flag(weatherInfoCurrentIcon, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
   setWeatherIconInHolder(weatherInfoCurrentIcon, 999);
-
-  weatherInfoTemperatureLabel = createWeatherInfoLabel(
-    currentCard, "--\xC2\xB0", &lv_font_inter_weather_52, lv_color_white());
-  lv_obj_set_pos(weatherInfoTemperatureLabel, 108, 39);
-  lv_obj_set_width(weatherInfoTemperatureLabel, 132);
-
-  weatherInfoConditionLabel = createWeatherInfoLabel(
-    currentCard, tr(STR_UNKNOWN), &lv_font_ui_28,
-    lv_color_white());
-  lv_obj_set_pos(weatherInfoConditionLabel, 14, 110);
-  lv_obj_set_size(weatherInfoConditionLabel, 204, 34);
+  weatherInfoTemperatureLabel = createWeatherInfoLabel(currentCard, "--\xC2\xB0", &lv_font_inter_weather_52, lv_color_white());
+  setWeatherInfoRect(weatherInfoTemperatureLabel, l.temperature);
+  weatherInfoConditionLabel = createWeatherInfoLabel(currentCard, tr(STR_UNKNOWN), &lv_font_ui_24, lv_color_white());
+  setWeatherInfoRect(weatherInfoConditionLabel, l.condition);
   lv_obj_set_style_text_align(weatherInfoConditionLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_label_set_long_mode(weatherInfoConditionLabel, LV_LABEL_LONG_SCROLL_CIRCULAR);
+  lv_label_set_long_mode(weatherInfoConditionLabel, LV_LABEL_LONG_WRAP);
+  weatherInfoDivider = lv_obj_create(currentCard);
+  lv_obj_remove_style_all(weatherInfoDivider);
+  setWeatherInfoRect(weatherInfoDivider, l.divider);
+  lv_obj_set_style_bg_opa(weatherInfoDivider, LV_OPA_COVER, 0);
+  lv_obj_clear_flag(weatherInfoDivider, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 
-  lv_obj_t *currentDivider = lv_obj_create(currentCard);
-  lv_obj_remove_style_all(currentDivider);
-  lv_obj_set_pos(currentDivider, 228, 24);
-  lv_obj_set_size(currentDivider, 1, 128);
-  lv_obj_set_style_bg_color(currentDivider, lv_color_hex(0x4A4A4A), 0);
-  lv_obj_set_style_bg_opa(currentDivider, LV_OPA_COVER, 0);
-  lv_obj_clear_flag(currentDivider,
-                    LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-
-  weatherInfoFeelsLabel = createWeatherInfoLabel(
-    currentCard, tr(STR_FEELS_DASH), &lv_font_ui_24, lv_color_hex(0xCBD5E1));
-  weatherInfoHumidityLabel = createWeatherInfoLabel(
-    currentCard, tr(STR_HUMIDITY_DASH), &lv_font_ui_24, lv_color_hex(0xCBD5E1));
-  weatherInfoWindLabel = createWeatherInfoLabel(
-    currentCard, tr(STR_WIND_DASH), &lv_font_ui_24, lv_color_hex(0xCBD5E1));
-  weatherInfoAqiLabel = createWeatherInfoLabel(
-    currentCard, tr(STR_AQI_DASH), &lv_font_ui_24, lv_color_hex(0xCBD5E1));
-  lv_obj_t *detailLabels[] = {
-    weatherInfoFeelsLabel, weatherInfoHumidityLabel,
-    weatherInfoWindLabel, weatherInfoAqiLabel
-  };
+  weatherInfoFeelsLabel = createWeatherInfoLabel(currentCard, tr(STR_FEELS_DASH), &lv_font_ui_20, lv_color_white());
+  weatherInfoHumidityLabel = createWeatherInfoLabel(currentCard, tr(STR_HUMIDITY_DASH), &lv_font_ui_20, lv_color_white());
+  weatherInfoWindLabel = createWeatherInfoLabel(currentCard, tr(STR_WIND_DASH), &lv_font_ui_20, lv_color_white());
+  weatherInfoAqiLabel = createWeatherInfoLabel(currentCard, tr(STR_AQI_DASH), &lv_font_ui_20, lv_color_white());
+  lv_obj_t *detailLabels[] = {weatherInfoFeelsLabel, weatherInfoHumidityLabel, weatherInfoWindLabel, weatherInfoAqiLabel};
   for (uint8_t i = 0; i < 4; ++i) {
-    lv_obj_set_pos(detailLabels[i], 244, 16 + i * 38);
-    lv_obj_set_size(detailLabels[i], 172, 28);
-    lv_label_set_long_mode(detailLabels[i], LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_align(detailLabels[i], LV_TEXT_ALIGN_LEFT, 0);
+    setWeatherInfoRect(detailLabels[i], l.details[i]);
+    lv_label_set_long_mode(detailLabels[i], LV_LABEL_LONG_WRAP);
   }
-
-  lv_obj_t *forecastTitle = createWeatherInfoLabel(
-    weatherInfoOverviewPage, tr(STR_FORECAST_3DAY), &lv_font_ui_20,
-    lv_color_hex(0x9299A3));
-  lv_obj_set_pos(forecastTitle, 24, 238);
+  lv_obj_t *forecastTitle = createWeatherInfoLabel(weatherInfoOverviewPage, tr(STR_FORECAST_3DAY), &lv_font_ui_20, lv_color_white());
+  setWeatherInfoRect(forecastTitle, l.forecastTitle);
   i18nRegister(forecastTitle, STR_FORECAST_3DAY);
-
   for (uint8_t i = 0; i < 3; ++i) {
-    lv_obj_t *card = createWeatherInfoCard(
-      weatherInfoOverviewPage, 24 + i * 146, 264, 140, 184);
-    weatherInfoForecastDateLabels[i] = createWeatherInfoLabel(
-      card, "--", &lv_font_ui_24, lv_color_hex(0xCBD5E1));
-    lv_obj_set_width(weatherInfoForecastDateLabels[i], 140);
-    lv_obj_set_style_text_align(weatherInfoForecastDateLabels[i],
-                                LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(weatherInfoForecastDateLabels[i], 0, 10);
+    weatherInfoCards[1 + i] = createWeatherInfoCard(weatherInfoOverviewPage, l.forecast[i]);
+    lv_obj_t *card = weatherInfoCards[1 + i];
+    weatherInfoForecastDateLabels[i] = createWeatherInfoLabel(card, "--", &lv_font_ui_20, lv_color_white());
+    setWeatherInfoRect(weatherInfoForecastDateLabels[i], l.forecastDate[i]);
+    lv_obj_set_style_text_align(weatherInfoForecastDateLabels[i], LV_TEXT_ALIGN_CENTER, 0);
     weatherInfoForecastIcons[i] = lv_obj_create(card);
     lv_obj_remove_style_all(weatherInfoForecastIcons[i]);
-    lv_obj_set_pos(weatherInfoForecastIcons[i], 42, 42);
-    lv_obj_set_size(weatherInfoForecastIcons[i], 56, 56);
+    setWeatherInfoRect(weatherInfoForecastIcons[i], l.forecastIcon[i]);
+    lv_obj_clear_flag(weatherInfoForecastIcons[i], LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     setWeatherIconInHolder(weatherInfoForecastIcons[i], 999);
-    weatherInfoForecastTemperatureLabels[i] = createWeatherInfoLabel(
-      card, "-- / --", &lv_font_ui_24, lv_color_white());
-    lv_obj_set_width(weatherInfoForecastTemperatureLabels[i], 140);
-    lv_obj_set_style_text_align(weatherInfoForecastTemperatureLabels[i],
-                                LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(weatherInfoForecastTemperatureLabels[i], 0, 105);
-    weatherInfoForecastConditionLabels[i] = createWeatherInfoLabel(
-      card, "Unknown", &lv_font_ui_24, lv_color_hex(0x9299A3));
-    lv_obj_set_size(weatherInfoForecastConditionLabels[i], 124, 28);
-    lv_label_set_long_mode(weatherInfoForecastConditionLabels[i],
-                           LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_obj_set_style_text_align(weatherInfoForecastConditionLabels[i],
-                                LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(weatherInfoForecastConditionLabels[i], 8, 140);
+    weatherInfoForecastTemperatureLabels[i] = createWeatherInfoLabel(card, "-- / --", &lv_font_ui_20, lv_color_white());
+    setWeatherInfoRect(weatherInfoForecastTemperatureLabels[i], l.forecastTemperature[i]);
+    lv_obj_set_style_text_align(weatherInfoForecastTemperatureLabels[i], LV_TEXT_ALIGN_CENTER, 0);
+    weatherInfoForecastConditionLabels[i] = createWeatherInfoLabel(card, tr(STR_UNKNOWN), &lv_font_ui_14, lv_color_white());
+    setWeatherInfoRect(weatherInfoForecastConditionLabels[i], l.forecastCondition[i]);
+    lv_label_set_long_mode(weatherInfoForecastConditionLabels[i], LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(weatherInfoForecastConditionLabels[i], LV_TEXT_ALIGN_CENTER, 0);
   }
   createWeatherInfoPageDots(weatherInfoOverviewPage, 0);
 
@@ -1060,41 +1021,27 @@ void createInfoPage(lv_obj_t *screen) {
   lv_obj_set_size(weatherInfoTrendPage, SCREEN_WIDTH, SCREEN_HEIGHT);
   lv_obj_clear_flag(weatherInfoTrendPage, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(weatherInfoTrendPage, LV_OBJ_FLAG_GESTURE_BUBBLE);
-
-  weatherTrendLocationLabel = createWeatherInfoLabel(
-    weatherInfoTrendPage, "--", &lv_font_ui_28, lv_color_white());
-  lv_obj_set_pos(weatherTrendLocationLabel, 32, 7);
-  lv_obj_set_width(weatherTrendLocationLabel, 432);
+  weatherTrendLocationLabel = createWeatherInfoLabel(weatherInfoTrendPage, "--", &lv_font_ui_24, lv_color_white());
+  setWeatherInfoRect(weatherTrendLocationLabel, l.trendLocation);
   lv_label_set_long_mode(weatherTrendLocationLabel, LV_LABEL_LONG_DOT);
 
-  lv_obj_t *hourlyCard = createWeatherInfoCard(
-    weatherInfoTrendPage, 24, 43, 432, 200);
-  lv_obj_t *hourlyTitle = createWeatherInfoLabel(
-    hourlyCard, tr(STR_TEMP_24H), &lv_font_ui_24,
-    lv_color_hex(0x9299A3));
-  lv_obj_set_pos(hourlyTitle, 12, 6);
-  lv_obj_set_height(hourlyTitle, 25);
+  weatherInfoCards[4] = createWeatherInfoCard(weatherInfoTrendPage, l.hourly);
+  lv_obj_t *hourlyCard = weatherInfoCards[4];
+  lv_obj_t *hourlyTitle = createWeatherInfoLabel(hourlyCard, tr(STR_TEMP_24H), &lv_font_ui_20, lv_color_white());
+  setWeatherInfoRect(hourlyTitle, l.hourlyTitle);
+  lv_label_set_long_mode(hourlyTitle, LV_LABEL_LONG_WRAP);
   i18nRegister(hourlyTitle, STR_TEMP_24H);
-  weatherHourlyStatusLabel = createWeatherInfoLabel(
-    hourlyCard, tr(STR_WAITING_FORECAST), &lv_font_ui_20,
-    lv_color_white());
-  lv_obj_set_pos(weatherHourlyStatusLabel, 251, 9);
-  lv_obj_set_width(weatherHourlyStatusLabel, 166);
+  weatherHourlyStatusLabel = createWeatherInfoLabel(hourlyCard, tr(STR_WAITING_FORECAST), &lv_font_ui_18, lv_color_white());
+  setWeatherInfoRect(weatherHourlyStatusLabel, l.hourlyStatus);
   lv_obj_set_style_text_align(weatherHourlyStatusLabel, LV_TEXT_ALIGN_RIGHT, 0);
-  lv_label_set_long_mode(weatherHourlyStatusLabel, LV_LABEL_LONG_DOT);
-
-  const int16_t hourlyYPositions[3] = {38, 95, 145};
-  const int16_t hourlyYWidths[3] = {51, 51, 52};
+  lv_label_set_long_mode(weatherHourlyStatusLabel, LV_LABEL_LONG_WRAP);
   for (uint8_t i = 0; i < 3; ++i) {
-    weatherHourlyYLabels[i] = createWeatherInfoLabel(
-      hourlyCard, "--", &lv_font_ui_20, lv_color_hex(0x9299A3));
-    lv_obj_set_pos(weatherHourlyYLabels[i], -1, hourlyYPositions[i]);
-    lv_obj_set_size(weatherHourlyYLabels[i], hourlyYWidths[i], 22);
+    weatherHourlyYLabels[i] = createWeatherInfoLabel(hourlyCard, "--", &lv_font_ui_18, lv_color_white());
+    setWeatherInfoRect(weatherHourlyYLabels[i], l.hourlyY[i]);
     lv_obj_set_style_text_align(weatherHourlyYLabels[i], LV_TEXT_ALIGN_RIGHT, 0);
   }
   weatherHourlyChart = lv_chart_create(hourlyCard);
-  lv_obj_set_pos(weatherHourlyChart, 55, 41);
-  lv_obj_set_size(weatherHourlyChart, 360, 126);
+  setWeatherInfoRect(weatherHourlyChart, l.hourlyChart);
   lv_chart_set_type(weatherHourlyChart, LV_CHART_TYPE_LINE);
   lv_chart_set_point_count(weatherHourlyChart, WEATHER_HOURLY_MAX_POINTS);
   lv_chart_set_range(weatherHourlyChart, LV_CHART_AXIS_PRIMARY_Y, -10, 40);
@@ -1102,105 +1049,62 @@ void createInfoPage(lv_obj_t *screen) {
   lv_obj_set_style_bg_opa(weatherHourlyChart, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(weatherHourlyChart, 0, 0);
   lv_obj_set_style_pad_all(weatherHourlyChart, 5, 0);
-  lv_obj_set_style_line_color(weatherHourlyChart, lv_color_hex(0x3A3A3A),
-                              LV_PART_MAIN);
-  lv_obj_set_style_line_opa(weatherHourlyChart, LV_OPA_70, LV_PART_MAIN);
-  lv_obj_set_style_line_width(weatherHourlyChart, 3, LV_PART_ITEMS);
-  lv_obj_set_style_size(weatherHourlyChart, 5, LV_PART_INDICATOR);
-  lv_obj_clear_flag(weatherHourlyChart,
-                    LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_line_opa(weatherHourlyChart, LV_OPA_50, LV_PART_MAIN);
+  lv_obj_set_style_line_width(weatherHourlyChart, 2, LV_PART_ITEMS);
+  lv_obj_set_style_size(weatherHourlyChart, 4, LV_PART_INDICATOR);
+  lv_obj_clear_flag(weatherHourlyChart, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(weatherHourlyChart, LV_OBJ_FLAG_GESTURE_BUBBLE);
-  weatherHourlySeries = lv_chart_add_series(
-    weatherHourlyChart, lv_color_hex(0x38BDF8), LV_CHART_AXIS_PRIMARY_Y);
-  weatherHourlySmooth.color = lv_color_hex(0x38BDF8);
+  weatherHourlySeries = lv_chart_add_series(weatherHourlyChart, lv_color_white(), LV_CHART_AXIS_PRIMARY_Y);
   weatherHourlySmooth.pointRadius = 2;
-  lv_obj_add_event_cb(weatherHourlyChart, drawSmoothWeatherChart,
-                      LV_EVENT_DRAW_PART_BEGIN, &weatherHourlySmooth);
-  lv_chart_set_all_value(weatherHourlyChart, weatherHourlySeries,
-                         LV_CHART_POINT_NONE);
-  const int16_t hourlyXPositions[3] = {60, 178, 346};
-  const int16_t hourlyXWidths[3] = {60, 110, 66};
-  const lv_text_align_t hourlyXAlignments[3] = {
-    LV_TEXT_ALIGN_LEFT, LV_TEXT_ALIGN_CENTER, LV_TEXT_ALIGN_RIGHT
-  };
+  lv_obj_add_event_cb(weatherHourlyChart, drawSmoothWeatherChart, LV_EVENT_DRAW_PART_BEGIN, &weatherHourlySmooth);
+  lv_chart_set_all_value(weatherHourlyChart, weatherHourlySeries, LV_CHART_POINT_NONE);
+  const lv_text_align_t hourlyXAlignments[3] = {LV_TEXT_ALIGN_LEFT, LV_TEXT_ALIGN_CENTER, LV_TEXT_ALIGN_RIGHT};
   const char *hourlyXText[3] = {"0h", "+12h", "+24h"};
   for (uint8_t i = 0; i < 3; ++i) {
-    weatherHourlyXLabels[i] = createWeatherInfoLabel(
-      hourlyCard, hourlyXText[i], &lv_font_ui_20,
-      lv_color_hex(0x9299A3));
-    lv_obj_set_pos(weatherHourlyXLabels[i], hourlyXPositions[i], 172);
-    lv_obj_set_size(weatherHourlyXLabels[i], hourlyXWidths[i], 22);
+    weatherHourlyXLabels[i] = createWeatherInfoLabel(hourlyCard, hourlyXText[i], &lv_font_ui_18, lv_color_white());
+    setWeatherInfoRect(weatherHourlyXLabels[i], l.hourlyX[i]);
     lv_obj_set_style_text_align(weatherHourlyXLabels[i], hourlyXAlignments[i], 0);
   }
 
-  lv_obj_t *minutelyCard = createWeatherInfoCard(
-    weatherInfoTrendPage, 24, 254, 432, 200);
-  lv_obj_t *minutelyTitle = createWeatherInfoLabel(
-    minutelyCard, tr(STR_PRECIP_2H), &lv_font_ui_25,
-    lv_color_hex(0x9299A3));
-  lv_obj_set_pos(minutelyTitle, 12, 6);
-  lv_obj_set_height(minutelyTitle, 25);
+  weatherInfoCards[5] = createWeatherInfoCard(weatherInfoTrendPage, l.minutely);
+  lv_obj_t *minutelyCard = weatherInfoCards[5];
+  lv_obj_t *minutelyTitle = createWeatherInfoLabel(minutelyCard, tr(STR_PRECIP_2H), &lv_font_ui_20, lv_color_white());
+  setWeatherInfoRect(minutelyTitle, l.minutelyTitle);
   i18nRegister(minutelyTitle, STR_PRECIP_2H);
-  weatherMinutelyStatusLabel = createWeatherInfoLabel(
-    minutelyCard, tr(STR_MINUTE_FORECAST_UNAVAILABLE), &lv_font_ui_18,
-    lv_color_hex(0xCBD5E1));
-  lv_obj_set_pos(weatherMinutelyStatusLabel, 14, 34);
-  lv_obj_set_size(weatherMinutelyStatusLabel, 396, 24);
-  lv_label_set_long_mode(weatherMinutelyStatusLabel,
-                         LV_LABEL_LONG_SCROLL_CIRCULAR);
-  lv_obj_set_style_text_align(weatherMinutelyStatusLabel, LV_TEXT_ALIGN_LEFT, 0);
+  weatherMinutelyStatusLabel = createWeatherInfoLabel(minutelyCard, tr(STR_MINUTE_FORECAST_UNAVAILABLE), &lv_font_ui_16, lv_color_white());
+  setWeatherInfoRect(weatherMinutelyStatusLabel, l.minutelyStatus);
+  lv_label_set_long_mode(weatherMinutelyStatusLabel, LV_LABEL_LONG_WRAP);
   for (uint8_t i = 0; i < 2; ++i) {
-    weatherMinutelyYLabels[i] = createWeatherInfoLabel(
-      minutelyCard, i ? "0.0mm" : "--", &lv_font_ui_16,
-      lv_color_hex(0x9299A3));
-    lv_obj_set_pos(weatherMinutelyYLabels[i], 0, i ? 148 : 59);
-    lv_obj_set_size(weatherMinutelyYLabels[i], 62, 22);
+    weatherMinutelyYLabels[i] = createWeatherInfoLabel(minutelyCard, i ? "0.0mm" : "--", &lv_font_ui_16, lv_color_white());
+    setWeatherInfoRect(weatherMinutelyYLabels[i], l.minutelyY[i]);
     lv_obj_set_style_text_align(weatherMinutelyYLabels[i], LV_TEXT_ALIGN_RIGHT, 0);
   }
   weatherMinutelyChart = lv_chart_create(minutelyCard);
-  lv_obj_set_pos(weatherMinutelyChart, 65, 61);
-  lv_obj_set_size(weatherMinutelyChart, 350, 110);
+  setWeatherInfoRect(weatherMinutelyChart, l.minutelyChart);
   lv_chart_set_type(weatherMinutelyChart, LV_CHART_TYPE_LINE);
-  lv_chart_set_point_count(weatherMinutelyChart,
-                           WEATHER_MINUTELY_MAX_POINTS);
+  lv_chart_set_point_count(weatherMinutelyChart, WEATHER_MINUTELY_MAX_POINTS);
   lv_chart_set_range(weatherMinutelyChart, LV_CHART_AXIS_PRIMARY_Y, 0, 10);
   lv_chart_set_div_line_count(weatherMinutelyChart, 3, 5);
   lv_obj_set_style_bg_opa(weatherMinutelyChart, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(weatherMinutelyChart, 0, 0);
   lv_obj_set_style_pad_all(weatherMinutelyChart, 5, 0);
-  lv_obj_set_style_line_color(weatherMinutelyChart, lv_color_hex(0x3A3A3A),
-                              LV_PART_MAIN);
-  lv_obj_set_style_line_opa(weatherMinutelyChart, LV_OPA_70, LV_PART_MAIN);
-  lv_obj_set_style_line_width(weatherMinutelyChart, 3, LV_PART_ITEMS);
+  lv_obj_set_style_line_opa(weatherMinutelyChart, LV_OPA_50, LV_PART_MAIN);
+  lv_obj_set_style_line_width(weatherMinutelyChart, 2, LV_PART_ITEMS);
   lv_obj_set_style_size(weatherMinutelyChart, 4, LV_PART_INDICATOR);
-  lv_obj_clear_flag(weatherMinutelyChart,
-                    LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(weatherMinutelyChart, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(weatherMinutelyChart, LV_OBJ_FLAG_GESTURE_BUBBLE);
-  weatherMinutelySeries = lv_chart_add_series(
-    weatherMinutelyChart, lv_color_hex(0x60A5FA), LV_CHART_AXIS_PRIMARY_Y);
-  weatherMinutelySmooth.color = lv_color_hex(0x60A5FA);
+  weatherMinutelySeries = lv_chart_add_series(weatherMinutelyChart, lv_color_white(), LV_CHART_AXIS_PRIMARY_Y);
   weatherMinutelySmooth.pointRadius = 2;
-  lv_obj_add_event_cb(weatherMinutelyChart, drawSmoothWeatherChart,
-                      LV_EVENT_DRAW_PART_BEGIN, &weatherMinutelySmooth);
-  lv_chart_set_all_value(weatherMinutelyChart, weatherMinutelySeries,
-                         LV_CHART_POINT_NONE);
-  const int16_t minutelyXPositions[3] = {58, 180, 342};
-  const int16_t minutelyXWidths[3] = {60, 110, 72};
-  const lv_text_align_t minutelyXAlignments[3] = {
-    LV_TEXT_ALIGN_LEFT, LV_TEXT_ALIGN_CENTER, LV_TEXT_ALIGN_RIGHT
-  };
+  lv_obj_add_event_cb(weatherMinutelyChart, drawSmoothWeatherChart, LV_EVENT_DRAW_PART_BEGIN, &weatherMinutelySmooth);
+  lv_chart_set_all_value(weatherMinutelyChart, weatherMinutelySeries, LV_CHART_POINT_NONE);
+  const lv_text_align_t minutelyXAlignments[3] = {LV_TEXT_ALIGN_LEFT, LV_TEXT_ALIGN_CENTER, LV_TEXT_ALIGN_RIGHT};
   const char *minutelyXText[3] = {"0m", "+60m", "+120m"};
   for (uint8_t i = 0; i < 3; ++i) {
-    weatherMinutelyXLabels[i] = createWeatherInfoLabel(
-      minutelyCard, minutelyXText[i], &lv_font_ui_20,
-      lv_color_hex(0x9299A3));
-    lv_obj_set_pos(weatherMinutelyXLabels[i], minutelyXPositions[i], 175);
-    lv_obj_set_size(weatherMinutelyXLabels[i], minutelyXWidths[i], 22);
-    lv_obj_set_style_text_align(weatherMinutelyXLabels[i],
-                                minutelyXAlignments[i], 0);
+    weatherMinutelyXLabels[i] = createWeatherInfoLabel(minutelyCard, minutelyXText[i], &lv_font_ui_18, lv_color_white());
+    setWeatherInfoRect(weatherMinutelyXLabels[i], l.minutelyX[i]);
+    lv_obj_set_style_text_align(weatherMinutelyXLabels[i], minutelyXAlignments[i], 0);
   }
   createWeatherInfoPageDots(weatherInfoTrendPage, 1);
-
   lv_obj_add_flag(weatherInfoTrendPage, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(weatherInfoPage, LV_OBJ_FLAG_HIDDEN);
 }
@@ -4824,65 +4728,50 @@ void serviceSerialCommands() {
 void refreshTheme() {
   if (!weatherInfoPage) return;
   lv_obj_set_style_bg_color(weatherInfoPage, themePageBackground(), 0);
-
   const lv_color_t text = themeText();
   const lv_color_t dim = themeTextDim(0x9299A3);
   const lv_color_t detail = themeTextDim(0xCBD5E1);
-  const lv_color_t accent = lv_color_hex(themeAccent(0x38BDF8));
-  const lv_color_t accent2 = lv_color_hex(themeAccent(0x60A5FA));
-  const lv_color_t grid = lv_color_hex(themeBorder(0x3A3A3A));
-
-  // Cards are the rounded, opaque containers directly under each sub-page.
+  const lv_color_t accent = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
+  const lv_color_t accent2 = lv_color_hex(themeAccent(UI_ACCENT_MINT));
+  const lv_color_t grid = themeControlBorder(UI_ACCENT_BLUE);
+  for (lv_obj_t *card : weatherInfoCards) {
+    if (!card) continue;
+    lv_obj_set_style_bg_color(card, themeControlSurface(UI_ACCENT_BLUE), 0);
+    lv_obj_set_style_border_color(card, grid, 0);
+  }
+  if (weatherInfoDivider) lv_obj_set_style_bg_color(weatherInfoDivider, grid, 0);
+  // Titles and axis labels share the theme's secondary text treatment.
   lv_obj_t *pages[] = {weatherInfoOverviewPage, weatherInfoTrendPage};
   for (lv_obj_t *page : pages) {
     if (!page) continue;
-    const uint32_t count = lv_obj_get_child_cnt(page);
-    for (uint32_t i = 0; i < count; ++i) {
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(page); ++i) {
       lv_obj_t *child = lv_obj_get_child(page, i);
-      if (lv_obj_get_style_bg_opa(child, 0) == LV_OPA_COVER &&
-          lv_obj_get_style_radius(child, 0) == 24) {
-        lv_obj_set_style_bg_color(child, lv_color_hex(themeSurface(0x0A0A0A)), 0);
-        lv_obj_set_style_border_color(child, grid, 0);
-      }
+      if (lv_obj_check_type(child, &lv_label_class))
+        lv_obj_set_style_text_color(child, dim, 0);
     }
   }
-
-  if (weatherInfoLocationLabel)
-    lv_obj_set_style_text_color(weatherInfoLocationLabel, text, 0);
-  if (weatherInfoUpdatedLabel)
-    lv_obj_set_style_text_color(weatherInfoUpdatedLabel, dim, 0);
-  if (weatherInfoTemperatureLabel)
-    lv_obj_set_style_text_color(weatherInfoTemperatureLabel, text, 0);
-  if (weatherInfoFeelsLabel)
-    lv_obj_set_style_text_color(weatherInfoFeelsLabel, detail, 0);
-  if (weatherInfoHumidityLabel)
-    lv_obj_set_style_text_color(weatherInfoHumidityLabel, detail, 0);
-  if (weatherInfoWindLabel)
-    lv_obj_set_style_text_color(weatherInfoWindLabel, detail, 0);
-  if (weatherInfoAqiLabel)
-    lv_obj_set_style_text_color(weatherInfoAqiLabel, detail, 0);
+  if (weatherInfoLocationLabel) lv_obj_set_style_text_color(weatherInfoLocationLabel, text, 0);
+  if (weatherInfoTemperatureLabel) lv_obj_set_style_text_color(weatherInfoTemperatureLabel, accent, 0);
+  if (weatherInfoConditionLabel) lv_obj_set_style_text_color(weatherInfoConditionLabel, text, 0);
+  lv_obj_t *detailLabels[] = {weatherInfoFeelsLabel, weatherInfoHumidityLabel, weatherInfoWindLabel, weatherInfoAqiLabel};
+  for (lv_obj_t *label : detailLabels)
+    if (label) lv_obj_set_style_text_color(label, detail, 0);
   for (uint8_t i = 0; i < 3; ++i) {
-    if (weatherInfoForecastDateLabels[i])
-      lv_obj_set_style_text_color(weatherInfoForecastDateLabels[i], dim, 0);
-    if (weatherInfoForecastTemperatureLabels[i])
-      lv_obj_set_style_text_color(weatherInfoForecastTemperatureLabels[i], text, 0);
-    if (weatherHourlyYLabels[i])
-      lv_obj_set_style_text_color(weatherHourlyYLabels[i], dim, 0);
-    if (weatherHourlyXLabels[i])
-      lv_obj_set_style_text_color(weatherHourlyXLabels[i], dim, 0);
-    if (weatherMinutelyXLabels[i])
-      lv_obj_set_style_text_color(weatherMinutelyXLabels[i], dim, 0);
+    if (weatherInfoForecastDateLabels[i]) lv_obj_set_style_text_color(weatherInfoForecastDateLabels[i], dim, 0);
+    if (weatherInfoForecastTemperatureLabels[i]) lv_obj_set_style_text_color(weatherInfoForecastTemperatureLabels[i], text, 0);
+    if (weatherInfoForecastConditionLabels[i]) lv_obj_set_style_text_color(weatherInfoForecastConditionLabels[i], dim, 0);
+    if (weatherHourlyYLabels[i]) lv_obj_set_style_text_color(weatherHourlyYLabels[i], dim, 0);
+    if (weatherHourlyXLabels[i]) lv_obj_set_style_text_color(weatherHourlyXLabels[i], dim, 0);
+    if (weatherMinutelyXLabels[i]) lv_obj_set_style_text_color(weatherMinutelyXLabels[i], dim, 0);
   }
-  for (uint8_t i = 0; i < 2; ++i)
-    if (weatherMinutelyYLabels[i])
-      lv_obj_set_style_text_color(weatherMinutelyYLabels[i], dim, 0);
-  if (weatherTrendLocationLabel)
-    lv_obj_set_style_text_color(weatherTrendLocationLabel, text, 0);
-  if (weatherHourlyStatusLabel)
-    lv_obj_set_style_text_color(weatherHourlyStatusLabel, text, 0);
-  if (weatherMinutelyStatusLabel)
-    lv_obj_set_style_text_color(weatherMinutelyStatusLabel, detail, 0);
-
+  for (uint8_t i = 0; i < 2; ++i) {
+    if (weatherMinutelyYLabels[i]) lv_obj_set_style_text_color(weatherMinutelyYLabels[i], dim, 0);
+    for (uint8_t j = 0; j < 2; ++j)
+      if (weatherInfoDots[i][j]) lv_obj_set_style_bg_color(weatherInfoDots[i][j], i == j ? accent : grid, 0);
+  }
+  if (weatherTrendLocationLabel) lv_obj_set_style_text_color(weatherTrendLocationLabel, text, 0);
+  if (weatherHourlyStatusLabel) lv_obj_set_style_text_color(weatherHourlyStatusLabel, accent, 0);
+  if (weatherMinutelyStatusLabel) lv_obj_set_style_text_color(weatherMinutelyStatusLabel, detail, 0);
   if (weatherHourlyChart) {
     lv_obj_set_style_line_color(weatherHourlyChart, grid, LV_PART_MAIN);
     if (weatherHourlySeries) weatherHourlySeries->color = accent;
@@ -4895,16 +4784,10 @@ void refreshTheme() {
     weatherMinutelySmooth.color = accent2;
     lv_chart_refresh(weatherMinutelyChart);
   }
-
-  // Wallpaper overlay (clock / temperature) sits on top of media; tint it to
-  // the phosphor hue in amber mode, keep the soft white otherwise.
-  const lv_color_t overlay =
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : lv_color_hex(0xF7F8FA);
+  const lv_color_t overlay = themeIsAmber() ? lv_color_hex(CRT_AMBER) : themeText();
   if (clockLabel) lv_obj_set_style_text_color(clockLabel, overlay, 0);
   if (temperatureLabel) lv_obj_set_style_text_color(temperatureLabel, overlay, 0);
   if (videoTimeLabel) lv_obj_set_style_text_color(videoTimeLabel, overlay, 0);
-
-  // Re-render dynamic content; icons/condition pick up weatherAccentForCode().
   weatherInfoPending = true;
   weatherTrendPending = true;
   serviceInfoPage();

@@ -1,17 +1,16 @@
-// UI theming. The default remains true-black AMOLED; additional palettes give
-// the OS a CRT, retro-futuristic, cyberpunk, aurora or deep-ocean character.
+// UI theming. Icon Glow is the default: true-black pages and translucent,
+// per-app color tints. The retired AMOLED Black entry is no longer selectable.
 // Included once by 08_LVGL_Clock.ino inside its private namespace, before the
 // UI modules.
 
 enum UiTheme : uint8_t {
-  UI_THEME_BLACK = 0,
+  UI_THEME_GLOW = 0,
   UI_THEME_AMBER,
   UI_THEME_RETRO,
   UI_THEME_CYBERPUNK,
   UI_THEME_AURORA,
   UI_THEME_OCEAN,
   UI_THEME_SPECTRUM,
-  UI_THEME_GLOW,
   UI_THEME_COUNT
 };
 
@@ -32,12 +31,11 @@ struct ThemePalette {
   bool monochromeAccent;
 };
 
-// Black and amber keep the historical behavior. The newer themes use a single
-// neon accent so tiles, sliders and charts stay cohesive, while surfaces and
-// borders carry the retro-futuristic / cyberpunk mood.
+// Glow and Spectrum keep per-app accents. Amber and the neon palettes use a
+// single accent so tiles, sliders, charts and app controls stay cohesive.
 static constexpr ThemePalette THEME_PALETTES[UI_THEME_COUNT] = {
-  // AMOLED Black: per-app accents, pure black background.
-  {0x000000, 0x000000, 0x000000, 0xFFFFFF, 0x9299A3, 0x000000, 0x000000, false},
+  // Icon Glow: per-app neon accents, pure-black pages and translucent tints.
+  {0x000000, 0x080B10, 0x243044, 0xFFFFFF, 0x9AA3B2, 0xFFFFFF, 0x000000, false},
   // CRT Amber: monochrome phosphor.
   {0x000000, 0x000000, CRT_AMBER_FAINT, CRT_AMBER, CRT_AMBER_DIM,
    CRT_AMBER, CRT_AMBER_GLOW, true},
@@ -56,14 +54,10 @@ static constexpr ThemePalette THEME_PALETTES[UI_THEME_COUNT] = {
   // Spectrum: neutral surfaces with individually coloured launcher glows.
   {0x050510, 0x10101B, 0x40405A, 0xF4F4FF, 0xA0A0B8,
    0xFFFFFF, 0x000000, false},
-  // Icon Glow: launcher tiles are a transparent tint of each icon's own neon
-  // hue on true black, with no halo. Graphite app-control surfaces elsewhere.
-  {0x000000, 0x262A33, 0x3A404C, 0xFFFFFF, 0x9AA3B2,
-   0xFFFFFF, 0x000000, false},
 };
 
 inline const ThemePalette &themePalette() {
-  return THEME_PALETTES[uiTheme < UI_THEME_COUNT ? uiTheme : UI_THEME_BLACK];
+  return THEME_PALETTES[uiTheme < UI_THEME_COUNT ? uiTheme : UI_THEME_GLOW];
 }
 
 inline bool themeIsAmber() { return uiTheme == UI_THEME_AMBER; }
@@ -71,59 +65,82 @@ inline bool themeIsSpectrum() { return uiTheme == UI_THEME_SPECTRUM; }
 inline bool themeIsGlow() { return uiTheme == UI_THEME_GLOW; }
 // Launcher palettes that give every tile its own vivid icon hue.
 inline bool themePerTileColors() { return themeIsSpectrum() || themeIsGlow(); }
-inline bool themeIsBlack() { return uiTheme == UI_THEME_BLACK; }
 inline bool themeIsRetro() { return uiTheme == UI_THEME_RETRO; }
 inline bool themeIsCyberpunk() { return uiTheme == UI_THEME_CYBERPUNK; }
 // True for the single-neon-accent palettes (retro / cyberpunk / aurora / ocean)
 // where every tile and control collapses onto one accent hue.
 inline bool themeIsNeon() {
-  return !themeIsBlack() && !themeIsAmber() && themePalette().monochromeAccent;
+  return !themeIsGlow() && !themeIsAmber() && themePalette().monochromeAccent;
 }
 
-// Accent family (tiles, sliders, progress, charts). Amber collapses every accent
-// to the single phosphor hue; the black theme keeps the original per-app color.
+// Accent family shared by tiles and every app. Amber collapses to phosphor;
+// Glow brightens the per-app accents to match the launcher neon palette.
 inline uint32_t themeAccent(uint32_t normal) {
   if (themeIsAmber()) return CRT_AMBER;
+  if (themeIsGlow()) {
+    switch (normal) {
+      case UI_ACCENT_BLUE: return 0x46A8FF;
+      case UI_ACCENT_MINT: return 0x53F0AA;
+      case UI_ACCENT_AMBER: return 0xFFB020;
+      case UI_ACCENT_ROSE: return 0xFF558F;
+      case UI_ACCENT_VIOLET: return 0xB57AFF;
+      case UI_ACCENT_BILIBILI: return 0xFF5C7A;
+      default: return normal;
+    }
+  }
   const ThemePalette &p = themePalette();
   return p.monochromeAccent ? p.accent : normal;
 }
-// Card / button surface. Amber keeps surfaces black so only traces emit light.
+// Near-black card surface. Amber and Glow keep the background AMOLED-friendly.
 inline uint32_t themeSurface(uint32_t normal) {
   if (themeIsAmber()) return 0x000000;
-  if (uiTheme == UI_THEME_BLACK) return normal;
+  if (themeIsGlow()) return 0x080B10;
   return themePalette().surface;
 }
 inline uint32_t themeBorder(uint32_t normal) {
   if (themeIsAmber()) return CRT_AMBER_FAINT;
-  if (uiTheme == UI_THEME_BLACK) return normal;
   return themePalette().border;
 }
 inline lv_color_t themeText() {
   if (themeIsAmber()) return lv_color_hex(CRT_AMBER);
-  if (uiTheme == UI_THEME_BLACK) return lv_color_white();
+  if (themeIsGlow()) return lv_color_white();
   return lv_color_hex(themePalette().text);
 }
 inline lv_color_t themeTextDim(uint32_t normal) {
   if (themeIsAmber()) return lv_color_hex(CRT_AMBER_DIM);
-  if (uiTheme == UI_THEME_BLACK) return lv_color_hex(normal);
   return lv_color_hex(themePalette().dim);
 }
 inline lv_color_t themeIcon() { return themeText(); }
 
+
 // Readable text/icon color on top of a filled accent surface. Amber phosphor
-// and the bright neon accents need dark glyphs; the black theme keeps the
-// original per-app accents, which are mid-tone and read best with white.
+// and the bright neon accents need dark glyphs. Spectrum uses white labels.
 inline lv_color_t themeTextOnAccent() {
-  if (themeIsBlack() || themeIsSpectrum()) return lv_color_white();
+  if (themeIsSpectrum()) return lv_color_white();
   return lv_color_black();
 }
 
-// The default and CRT themes stay true black for the AMOLED panel; the newer
+// Glow and CRT stay true black for the AMOLED panel; the newer
 // palettes use very dark tinted backgrounds so their neon traces read correctly.
 inline lv_color_t themePageBackground() {
-  if (uiTheme == UI_THEME_BLACK || themeIsAmber()) return lv_color_black();
+  if (themeIsGlow() || themeIsAmber()) return lv_color_black();
   return lv_color_hex(themePalette().background);
 }
+
+// Shared app-control treatment: Glow/Spectrum use a low-opacity accent tint,
+// while the other palettes retain their own surfaces. No icon halo is added.
+inline lv_color_t themeTint(uint32_t accent, lv_opa_t opacity) {
+  return lv_color_mix(lv_color_hex(themeAccent(accent)), themePageBackground(), opacity);
+}
+inline lv_color_t themeControlSurface(uint32_t accent) {
+  return themePerTileColors() ? themeTint(accent, LV_OPA_20)
+                             : lv_color_hex(themeSurface(0x080B10));
+}
+inline lv_color_t themeControlBorder(uint32_t accent) {
+  return themePerTileColors() ? themeTint(accent, LV_OPA_50)
+                             : lv_color_hex(themeBorder(0x243044));
+}
+
 
 inline bool themeHasGlow() {
   return themeIsAmber() || themePalette().glow != 0;
@@ -135,14 +152,14 @@ inline uint32_t themeGlowColor() {
 
 inline const char *themeShortName() {
   switch (uiTheme) {
+    case UI_THEME_GLOW: return "GLW";
     case UI_THEME_AMBER: return "CRT";
     case UI_THEME_RETRO: return "RET";
     case UI_THEME_CYBERPUNK: return "CYB";
     case UI_THEME_AURORA: return "AUR";
     case UI_THEME_OCEAN: return "OCN";
     case UI_THEME_SPECTRUM: return "SPC";
-    case UI_THEME_GLOW: return "GLW";
-    default: return "STD";
+    default: return "GLW";
   }
 }
 
@@ -181,7 +198,8 @@ void setUiTheme(uint8_t theme, bool persist) {
   theme = min<uint8_t>(theme, UI_THEME_COUNT - 1);
   if (theme == uiTheme) return;
   uiTheme = theme;
-  if (persist) preferences.putUChar("ui_theme", uiTheme);
+  if (persist) preferences.putUChar("ui_theme_v2", uiTheme);
+  preferences.putUChar("ui_schema", 2);
   Serial.printf("UI: theme -> %u (refresh requested)\n", uiTheme);
   requestUiAppearanceChange();
 }

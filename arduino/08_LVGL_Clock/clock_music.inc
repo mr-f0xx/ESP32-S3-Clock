@@ -295,23 +295,18 @@ void refreshMusicPlaylistStyles() {
   for (uint32_t i = 0; i < childCount; ++i) {
     lv_obj_t *row = lv_obj_get_child(musicPlaylistList, i);
     const bool selected = i == musicTrackIndex;
-    if (themeIsAmber()) {
-      // Inverted amber key for the active track, black keys for the rest.
-      lv_obj_set_style_bg_color(row,
-        selected ? lv_color_hex(CRT_AMBER) : lv_color_black(), LV_PART_MAIN);
-      lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_PART_MAIN);
-      lv_obj_set_style_border_color(row, lv_color_hex(CRT_AMBER_FAINT), LV_PART_MAIN);
-    } else {
-      lv_obj_set_style_bg_color(row,
-        lv_color_hex(selected ? UI_ACCENT_VIOLET : 0x0D0D12), LV_PART_MAIN);
-      lv_obj_set_style_bg_opa(row, selected ? LV_OPA_COVER : LV_OPA_80, LV_PART_MAIN);
-      lv_obj_set_style_border_color(row,
-        lv_color_hex(selected ? 0xA78BFA : 0x282C37), LV_PART_MAIN);
-    }
+    // Shared themed list treatment: selected rows use the app accent and a
+    // readable on-accent label; unselected rows stay on the theme surface.
+    lv_obj_set_style_bg_color(row,
+      selected ? lv_color_hex(themeAccent(UI_ACCENT_VIOLET))
+               : themeControlSurface(UI_ACCENT_VIOLET), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(row, selected ? LV_OPA_COVER : LV_OPA_80, LV_PART_MAIN);
+    lv_obj_set_style_border_color(row,
+      selected ? lv_color_hex(themeAccent(UI_ACCENT_VIOLET))
+               : themeControlBorder(UI_ACCENT_VIOLET), LV_PART_MAIN);
     if (lv_obj_get_child_cnt(row)) {
       lv_obj_set_style_text_color(lv_obj_get_child(row, 0),
-        themeIsAmber() ? (selected ? lv_color_black() : lv_color_hex(CRT_AMBER))
-                       : lv_color_white(), 0);
+        selected ? themeTextOnAccent() : themeText(), 0);
     }
   }
 }

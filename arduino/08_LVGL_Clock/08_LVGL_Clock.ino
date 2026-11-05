@@ -42,6 +42,7 @@
 #include "XPowersLib.h"
 #include "web_page.h"
 #include "utility_calculator.h"
+#include "clock_layout.h"
 #include "tabler_control_icons.h"
 #include "weather_tabler_icons.h"
 #include "clock_weather_config.h"
@@ -111,10 +112,10 @@ constexpr float ORIENTATION_AXIS_MARGIN = 0.07f;
 constexpr uint32_t NTP_RETRY_MS = 8000;
 constexpr uint32_t NTP_TEMPORARY_WIFI_TIMEOUT_MS = 45000;
 constexpr int16_t TIME_PANEL_MIN_WIDTH = 132;
-constexpr int16_t TIME_PANEL_MAX_WIDTH = 240;
-constexpr int16_t TIME_PANEL_HEIGHT = 84;
+constexpr int16_t TIME_PANEL_MAX_WIDTH = SCREEN_WIDTH - 32;
+constexpr int16_t TIME_PANEL_HEIGHT = 144;
 constexpr int16_t TIME_PANEL_RADIUS = 36;
-constexpr int16_t TIME_PANEL_HORIZONTAL_PADDING = 20;
+constexpr int16_t TIME_PANEL_HORIZONTAL_PADDING = 16;
 constexpr float TIME_PANEL_FEATHER = 28.0f;
 constexpr size_t TIME_PANEL_BUFFER_BYTES =
   LV_CANVAS_BUF_SIZE_TRUE_COLOR_ALPHA(TIME_PANEL_MAX_WIDTH, TIME_PANEL_HEIGHT);
@@ -238,6 +239,16 @@ lv_obj_t *colorControlButton = nullptr;
 lv_obj_t *colorControlLabel = nullptr;
 lv_obj_t *fontControlButton = nullptr;
 lv_obj_t *fontControlLabel = nullptr;
+lv_obj_t *sizeControlButton = nullptr;
+lv_obj_t *sizeControlLabel = nullptr;
+lv_obj_t *controlCloseButton = nullptr;
+lv_obj_t *controlBrightnessIcon = nullptr;
+lv_obj_t *controlVolumeIcon = nullptr;
+lv_obj_t *controlBrightnessTitle = nullptr;
+lv_obj_t *controlVolumeTitle = nullptr;
+lv_obj_t *controlBrightnessValue = nullptr;
+lv_obj_t *controlVolumeValue = nullptr;
+lv_obj_t *controlHintLabel = nullptr;
 lv_obj_t *wifiControlButton = nullptr;
 lv_obj_t *bluetoothControlButton = nullptr;
 lv_obj_t *wifiControlStatus = nullptr;
@@ -381,16 +392,19 @@ uint16_t albumSwitchMinutes = DEFAULT_ALBUM_SWITCH_MINUTES;
 uint8_t albumImageLimit = DEFAULT_ALBUM_IMAGE_LIMIT;
 uint16_t weatherSwitchMinutes = DEFAULT_WEATHER_SWITCH_MINUTES;
 uint8_t clockFontIndex = CLOCK_FONT_MONTSERRAT;
+uint8_t clockSizeIndex = ClockLayout::CLOCK_SIZE_DEFAULT;
+uint8_t pendingClockSizeIndex = ClockLayout::CLOCK_SIZE_DEFAULT;
+bool clockSizeChangeRequested = false;
 uint8_t pendingClockFontIndex = CLOCK_FONT_MONTSERRAT;
 bool clockFontChangeRequested = false;
 // Clock digit color preset. 0 follows the active OS theme; the other entries
 // are fixed colors the user can pick from the web UI or the control panel.
 uint8_t clockColorIndex = 0;
 bool clockColorChangeRequested = false;
-// UI language (0 = English, 1 = French) and theme (0 = AMOLED black,
+// UI language (0 = English, 1 = French) and theme (0 = Icon Glow,
 // 1 = CRT amber). Named constants live in clock_i18n.inc / clock_theme.inc.
 uint8_t uiLanguage = 0;
-uint8_t uiTheme = 0;
+uint8_t uiTheme = ClockLayout::THEME_GLOW;
 bool uiAppearanceChangeRequested = false;
 String uploadError;
 File uploadFile;
@@ -434,6 +448,7 @@ void updateControlPanelStatus();
 // from applyUiAppearance().
 void updateNetworkLabels();
 void syncControlPanelSettings();
+void updateControlPillLabels();
 void processControlPanelTransition();
 void processControlPanelActions();
 void createAppMenu();
@@ -731,15 +746,26 @@ void loop() {
     lv_refr_now(nullptr);
     endScreenFade(activeBrightness);
   }
-  if (clockFontChangeRequested && !screenFadeTransitionActive) {
-    clockFontChangeRequested = false;
-    if (pendingClockFontIndex < CLOCK_FONT_COUNT &&
-        pendingClockFontIndex != clockFontIndex) {
+  if ((clockFontChangeRequested || clockSizeChangeRequested) &&
+      !screenFadeTransitionActive) {
+    const bool fontChanged = clockFontChangeRequested &&
+      pendingClockFontIndex < CLOCK_FONT_COUNT && pendingClockFontIndex != clockFontIndex;
+    const bool sizeChanged = clockSizeChangeRequested &&
+      pendingClockSizeIndex < ClockLayout::CLOCK_SIZE_COUNT &&
+      pendingClockSizeIndex != clockSizeIndex;
+    clockFontChangeRequested = clockSizeChangeRequested = false;
+    if (fontChanged || sizeChanged) {
       beginScreenFade(activeBrightness);
-      clockFontIndex = pendingClockFontIndex;
-      preferences.putUChar("clock_font", clockFontIndex);
+      if (fontChanged) {
+        clockFontIndex = pendingClockFontIndex;
+        preferences.putUChar("clock_font", clockFontIndex);
+      }
+      if (sizeChanged) {
+        clockSizeIndex = pendingClockSizeIndex;
+        preferences.putUChar("clock_size", clockSizeIndex);
+      }
       applyClockFont();
-      lv_obj_invalidate(timePanel);
+      lv_obj_invalidate(lv_scr_act());
       lv_refr_now(nullptr);
       endScreenFade(activeBrightness);
     }

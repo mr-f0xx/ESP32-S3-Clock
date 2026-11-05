@@ -300,10 +300,10 @@ void enterLowPowerClockMode() {
     lv_obj_set_style_border_width(timePanel, 0, 0);
     lv_obj_set_style_radius(timePanel, 0, 0);
     lv_obj_set_style_shadow_width(timePanel, 0, 0);
-    // Use a real 96 px font in standby. Unlike transform_zoom, its layout and
-    // clipping bounds match the rendered glyphs.
+    // Use the selected native bitmap size in standby. Unlike transform_zoom,
+    // its layout and clipping bounds match the rendered glyphs.
     applyClockFont();
-    lv_obj_align(timePanel, LV_ALIGN_CENTER, 0, -36);
+    lv_obj_align(timePanel, LV_ALIGN_CENTER, 0, 0);
     lv_obj_center(timeLabel);
     lv_obj_clear_flag(timeLabel, LV_OBJ_FLAG_HIDDEN);
     applyClockColor();
@@ -427,7 +427,7 @@ void exitLowPowerClockMode() {
   if (addressLabel) lv_obj_add_flag(addressLabel, LV_OBJ_FLAG_HIDDEN);
   if (settingsButton) lv_obj_add_flag(settingsButton, LV_OBJ_FLAG_HIDDEN);
 
-  // loadSettings() has already reapplied the selected 48 px main-page font
+  // loadSettings() has already reapplied the selected native clock size
   // and restored the normal time panel dimensions.
   lv_obj_set_style_bg_opa(timePanel, LV_OPA_TRANSP, 0);
   lv_obj_set_style_bg_grad_dir(timePanel, LV_GRAD_DIR_NONE, 0);
@@ -440,7 +440,7 @@ void exitLowPowerClockMode() {
     lv_obj_set_style_bg_opa(timePanel, LV_OPA_20, 0);
     lv_obj_set_style_radius(timePanel, TIME_PANEL_RADIUS, 0);
   }
-  lv_obj_align(timePanel, LV_ALIGN_TOP_LEFT, 24, 24);
+  lv_obj_align(timePanel, LV_ALIGN_TOP_LEFT, ClockLayout::scale(24, SCREEN_WIDTH), ClockLayout::scale(24, SCREEN_HEIGHT));
   lv_obj_center(timeLabel);
   applyClockColor();
   // Screen-off standby hides both objects. Restoring their normal styles does
