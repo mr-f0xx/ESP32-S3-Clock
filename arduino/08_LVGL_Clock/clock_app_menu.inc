@@ -7,6 +7,7 @@
 //          https://tabler.io/icons/icon/alarm
 //          https://tabler.io/icons/icon/adjustments
 //          https://tabler.io/icons/icon/music
+//          https://tabler.io/icons/icon/power
 // Included once by 08_LVGL_Clock.ino inside its private namespace.
 
 constexpr int16_t APP_MENU_SIZE = 480;
@@ -1122,8 +1123,7 @@ void createAppMenu() {
     appTileIconColor(UI_ACCENT_MINT));
   lv_obj_t *powerButton = createAppTile(
     appMenuPages[2], APP_MENU_POWER, 1, UI_ACCENT_ROSE);
-  createTablerIcon(powerButton, TABLER_ICON_POWER, APP_MENU_ICON_SIZE,
-    appTileIconColor(UI_ACCENT_ROSE));
+  createTablerAppIcon(powerButton, &tabler_power);
   lv_obj_t *worldButton = createAppTile(
     appMenuPages[2], APP_MENU_WORLD_CLOCK, 2, UI_ACCENT_BLUE);
   createTablerIcon(worldButton, TABLER_ICON_WORLD, APP_MENU_ICON_SIZE,

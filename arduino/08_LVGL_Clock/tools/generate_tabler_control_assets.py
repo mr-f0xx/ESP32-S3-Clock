@@ -37,6 +37,9 @@ ICONS = {
     "calendar": 120,
     "video": 120,
     "device-tv": 120,
+    # The launcher power glyph used a coarse 12-point polyline and looked
+    # faceted at 120 px. Use the official smooth outline like the other keys.
+    "power": 120,
     "cloud": 120,
     "x": 32,
 }
