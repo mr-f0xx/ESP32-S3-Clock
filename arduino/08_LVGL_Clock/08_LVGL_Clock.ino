@@ -47,6 +47,19 @@
 #include "weather_tabler_icons.h"
 #include "clock_weather_config.h"
 
+// Extension-app libraries must be included at global scope. Pulling them into
+// the sketch's private namespace below breaks std:: templates / C++ linkage.
+#include <ArduinoJson.h>
+#include <mbedtls/md5.h>
+#include "src/vault_crypto.h"
+#include <bootloader_random.h>
+#include <esp_wifi.h>
+#include <esp_wifi_types.h>
+#if defined(CONFIG_TINYUSB_HID_ENABLED) && CONFIG_TINYUSB_HID_ENABLED
+#include <USBHIDKeyboard.h>
+#include "keyboardLayout/KeyboardLayout.h"
+#endif
+
 namespace {
 
 enum ClockFontId : uint8_t {

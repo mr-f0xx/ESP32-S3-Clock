@@ -1,12 +1,8 @@
 // AES-256-GCM password vault + explicit, host-focused USB keyboard typing.
-#include "src/vault_crypto.h"
-#include <bootloader_random.h>
 #if !defined(CONFIG_TINYUSB_HID_ENABLED) || !CONFIG_TINYUSB_HID_ENABLED
 #error "Password vault USB typing requires CONFIG_TINYUSB_HID_ENABLED=y in the ESP32 Arduino core"
 #endif
 #if defined(CONFIG_TINYUSB_HID_ENABLED) && CONFIG_TINYUSB_HID_ENABLED
-#include <USBHIDKeyboard.h>
-#include "keyboardLayout/KeyboardLayout.h"
 // Global constructor registers the HID interface before Arduino main() starts
 // TinyUSB. CDC remains enabled for serial/upload; reports are never sent here.
 USBHIDKeyboard vaultUsbKeyboard;

@@ -45,6 +45,10 @@ assert 'mbedtls_gcm_auth_decrypt' in crypto and 'mbedtls_pkcs5_pbkdf2_hmac' in c
 assert 'VAULT_KDF_ITERATIONS = 600000' in crypto
 assert 'VaultCrypto::MAX_FILE' not in (root / 'clock_vault.inc').read_text()
 assert 'mbedtls_pkcs5_pbkdf2_hmac_ext' in crypto
+sketch = (root / '08_LVGL_Clock.ino').read_text()
+assert sketch.index('#include <ArduinoJson.h>') < sketch.index('namespace {')
+assert '#include <ArduinoJson.h>' not in (root / 'clock_subsonic.inc').read_text()
+assert 'int status() { return http.connected()' in (root / 'clock_subsonic.inc').read_text()
 assert 'bootloader_fill_random' in vault and 'vaultTypeConfirmed' in vault
 assert 'Confirm USB typing' in vault and 'vaultStopTyping' in vault
 assert 'vaultLock();' in ext and 'VaultCrypto::wipe(vaultRecords' in vault

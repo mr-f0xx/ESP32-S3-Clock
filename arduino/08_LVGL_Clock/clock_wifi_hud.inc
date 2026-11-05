@@ -1,8 +1,6 @@
 // Local RF diagnostics: network names/RSSI from normal scans, plus aggregate
 // 802.11 frame counts. Promiscuous payloads, MAC addresses and credentials are
 // never recorded, displayed, uploaded, or written to storage.
-#include <esp_wifi.h>
-#include <esp_wifi_types.h>
 constexpr uint8_t HUD_NETWORK_LIMIT = 8;
 volatile uint32_t hudManagement = 0, hudData = 0, hudControl = 0, hudOther = 0;
 volatile uint32_t hudWeak = 0, hudMedium = 0, hudStrong = 0;

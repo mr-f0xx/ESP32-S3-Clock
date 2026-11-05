@@ -1,6 +1,4 @@
 // Subsonic API 1.16.1 client (Navidrome / Gonic / compatible servers).
-#include <ArduinoJson.h>
-#include <mbedtls/md5.h>
 #include "src/subsonic_protocol.h"
 
 constexpr uint8_t SUBSONIC_TRACK_LIMIT = 60;
@@ -61,7 +59,7 @@ class SubsonicHttpSource : public AudioFileSource {
   bool isOpen() override { return opened; }
   uint32_t getSize() override { return length > 0 ? length : 0; }
   uint32_t getPos() override { return position; }
-  int status() const { return http.connected() ? 200 : 0; }
+  int status() { return http.connected() ? 200 : 0; }
  private:
   uint32_t receive(void *data, uint32_t wanted, bool blocking) {
     if (!opened || !data) return 0;
