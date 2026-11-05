@@ -41,6 +41,7 @@
 #include "SensorPCF85063.hpp"
 #include "XPowersLib.h"
 #include "web_page.h"
+#include "utility_calculator.h"
 #include "tabler_control_icons.h"
 #include "weather_tabler_icons.h"
 #include "clock_weather_config.h"
@@ -56,11 +57,16 @@ enum ClockFontId : uint8_t {
   CLOCK_FONT_AUDIOWIDE,
   CLOCK_FONT_CINZEL,
   CLOCK_FONT_BEBASNEUE,
+  CLOCK_FONT_DIGITALNUMBERS,
+  CLOCK_FONT_RAJDHANI,
+  CLOCK_FONT_ROBOTOMONO,
+  CLOCK_FONT_NEONLINES,
   CLOCK_FONT_COUNT
 };
 
 constexpr uint16_t SCREEN_WIDTH = LCD_WIDTH;
 constexpr uint16_t SCREEN_HEIGHT = LCD_HEIGHT;
+constexpr int16_t CONTROL_PANEL_GESTURE_EDGE = 72;
 constexpr uint16_t WEATHER_VIDEO_HEIGHT = 360;
 constexpr size_t IMAGE_BYTES = static_cast<size_t>(SCREEN_WIDTH) * SCREEN_HEIGHT * 2;
 // Keep the CO5300 QSPI clock identical to the standalone 09 player. Calling
@@ -258,7 +264,8 @@ String weatherLocation = CLOCK_QWEATHER_LOCATION;
 bool weatherAutoLocationEnabled = true;
 char apSsid[32] = {};
 
-bool webServerStarted = false;
+bool webServerStarted = false;  // Routes have been registered.
+bool webServerListening = false;
 bool portalActive = false;
 bool ntpStarted = false;
 bool temporaryNtpWifi = false;
@@ -508,6 +515,8 @@ void servicePhotoFrame();
 void refreshPhotoFrameTheme();
 void suspendPhotoFrameForLowPower();
 void selectAdjacentPhoto(int8_t direction);
+void openUtilityApp(uint8_t app);
+void serviceUtilityApps();
 void createTimerPage(lv_obj_t *screen);
 void showTimerPage(bool fade = true);
 void hideTimerPage(bool fade = true, bool returnToMenu = true);
@@ -576,6 +585,7 @@ void serviceAlbumAutoSwitch();
 #include "clock_time.inc"
 #include "clock_control_panel.inc"
 #include "clock_app_menu.inc"
+#include "clock_utilities.inc"
 #include "clock_alarm.inc"
 #include "clock_music.inc"
 #include "clock_audiobook.inc"
@@ -678,8 +688,9 @@ void loop() {
   serviceWorldClock();
   servicePhotoFrame();
   serviceTimer();
+  serviceUtilityApps();
 
-  if (webServerStarted && wifiUserEnabled) server.handleClient();
+  if (webServerListening && wifiUserEnabled) server.handleClient();
   if (portalActive) dnsServer.processNextRequest();
   updateRtcFromNtp();
 

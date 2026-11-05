@@ -29,10 +29,19 @@ uint32_t powerOffChoiceSuppressedUntil = 0;
 // Track the launcher tiles so a theme change can recolor every key without
 // rebuilding the menu. The base color is the per-app accent used in the black
 // theme; the amber theme turns each tile into a black, amber-outlined key.
-constexpr uint8_t APP_MENU_TILE_CAPACITY = 13;
+constexpr uint8_t APP_MENU_TILE_CAPACITY = 16;
 lv_obj_t *appMenuTileButtons[APP_MENU_TILE_CAPACITY] = {};
 uint32_t appMenuTileColors[APP_MENU_TILE_CAPACITY] = {};
+// Indexed by launcher tile creation order, including the three utility apps.
+// Each tile gets its own trace and halo instead of one theme-wide accent.
+constexpr uint32_t SPECTRUM_TILE_COLORS[APP_MENU_TILE_CAPACITY] = {
+  0xFFB020, 0xFF5C7A, 0xA8B6FF, 0x46A8FF,
+  0x3FE0D0, 0xFF558F, 0xB57AFF, 0x53F0AA,
+  0x43E8FF, 0xFF6551, 0x6B9CFF, 0xE96AFF,
+  0xFFE05C, 0x8CE85A, 0xFF9656, 0xE8A4FF
+};
 uint8_t appMenuTileCount = 0;
+lv_obj_t *utilityTileLabels[3] = {};
 
 enum AppMenuItem : uint8_t {
   APP_MENU_CLOCK = 0,
@@ -47,7 +56,10 @@ enum AppMenuItem : uint8_t {
   APP_MENU_POWER,
   APP_MENU_WORLD_CLOCK,
   APP_MENU_PHOTO_FRAME,
-  APP_MENU_TIMER
+  APP_MENU_TIMER,
+  APP_MENU_CALCULATOR,
+  APP_MENU_NOTES,
+  APP_MENU_STOPWATCH
 };
 
 void cancelPendingAppLaunches() {
@@ -443,7 +455,7 @@ void appMenuItemEvent(lv_event_t *event) {
       static_cast<int32_t>(now - appMenuClickSuppressedUntil) < 0) return;
   const AppMenuItem item = static_cast<AppMenuItem>(
     reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
-  if (item > APP_MENU_TIMER) return;
+  if (item > APP_MENU_STOPWATCH) return;
   // Guard every normal click too, not only a preceding swipe. CST9217 can
   // occasionally report another press after release, especially near a
   // rotation; without this lock the second sample could launch another tile.
@@ -481,6 +493,8 @@ void appMenuItemEvent(lv_event_t *event) {
     showPhotoFramePage(true);
   } else if (item == APP_MENU_TIMER) {
     showTimerPage(true);
+  } else if (item >= APP_MENU_CALCULATOR && item <= APP_MENU_STOPWATCH) {
+    openUtilityApp(static_cast<uint8_t>(item - APP_MENU_CALCULATOR));
   } else {
     // The Settings tile exposes the same configuration page served over the
     // normal Wi-Fi connection, but through a predictable local hotspot.
@@ -605,6 +619,13 @@ void appPageGestureEvent(lv_event_t *event) {
   if (weatherPageVisible || weatherInfoPageVisible) {
     // This object callback is intentionally inert so child labels, direct-LCD
     // video and LVGL gesture bubbling cannot duplicate the physical gesture.
+    return;
+  }
+  if (direction == LV_DIR_BOTTOM && gestureStartY >= 0 &&
+      gestureStartY <= CONTROL_PANEL_GESTURE_EDGE) {
+    gestureStartX = -1;
+    gestureStartY = -1;
+    showControlPanel(true);
     return;
   }
   if (musicPlaylistVisible) {
@@ -840,12 +861,25 @@ void createPowerOffSelector() {
 // every accent to one hue; amber uses the phosphor trace; black keeps white.
 lv_color_t appTileIconColor(uint32_t accent) {
   if (themeIsAmber()) return lv_color_hex(CRT_AMBER);
+  if (themeIsSpectrum()) return lv_color_hex(accent);
   if (themeIsNeon()) return lv_color_hex(themeAccent(accent));
   return lv_color_white();
 }
 
 void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
-  if (themeIsAmber()) {
+  if (themeIsSpectrum()) {
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x10101B), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(button, 2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, lv_color_hex(color), LV_PART_MAIN);
+    lv_obj_set_style_border_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(button, 18, LV_PART_MAIN);
+    lv_obj_set_style_shadow_spread(button, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_color(button, lv_color_hex(color), LV_PART_MAIN);
+    lv_obj_set_style_shadow_opa(button, LV_OPA_40, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(color), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
+  } else if (themeIsAmber()) {
     lv_obj_set_style_bg_color(button, lv_color_black(), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(button, 2, LV_PART_MAIN);
@@ -882,6 +916,7 @@ void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
     lv_obj_set_style_border_color(button, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_set_style_border_opa(button, LV_OPA_20, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(button, 18, LV_PART_MAIN);
+    lv_obj_set_style_shadow_color(button, lv_color_black(), LV_PART_MAIN);
     lv_obj_set_style_shadow_opa(button, LV_OPA_20, LV_PART_MAIN);
     lv_obj_set_style_bg_color(button, lv_color_hex(0xFFFFFF),
                               LV_PART_MAIN | LV_STATE_PRESSED);
@@ -907,7 +942,8 @@ lv_obj_t *createAppTile(lv_obj_t *parent, AppMenuItem item, uint8_t slot,
                  APP_MENU_TILE_TOP + row * (APP_MENU_TILE_SIZE + APP_MENU_TILE_GAP_Y));
   lv_obj_set_size(button, APP_MENU_TILE_SIZE, APP_MENU_TILE_SIZE);
   lv_obj_set_style_radius(button, 38, LV_PART_MAIN);
-  applyAppTileTheme(button, color);
+  applyAppTileTheme(button, themeIsSpectrum() && appMenuTileCount < APP_MENU_TILE_CAPACITY
+                            ? SPECTRUM_TILE_COLORS[appMenuTileCount] : color);
   lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(button, LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_event_cb(button, appMenuItemEvent, LV_EVENT_CLICKED,
@@ -1078,6 +1114,19 @@ void createAppMenu() {
   createTablerIcon(timerButton, TABLER_ICON_TIMER, 80,
     appTileIconColor(UI_ACCENT_AMBER));
 
+  const char *utilityNames[] = {tr(STR_CALCULATOR), tr(STR_NOTES), tr(STR_STOPWATCH)};
+  const AppMenuItem utilityItems[] = {APP_MENU_CALCULATOR, APP_MENU_NOTES, APP_MENU_STOPWATCH};
+  const uint32_t utilityColors[] = {UI_ACCENT_BLUE, UI_ACCENT_MINT, UI_ACCENT_ROSE};
+  for (uint8_t i = 0; i < 3; ++i) {
+    lv_obj_t *tile = createAppTile(appMenuPages[3], utilityItems[i], i + 1, utilityColors[i]);
+    lv_obj_t *label = lv_label_create(tile);
+    utilityTileLabels[i] = label;
+    lv_label_set_text(label, utilityNames[i]);
+    lv_obj_set_style_text_font(label, &lv_font_ui_20, 0);
+    lv_obj_set_style_text_color(label, appTileIconColor(utilityColors[i]), 0);
+    lv_obj_center(label);
+  }
+
   for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
     appMenuPageDots[i] = lv_obj_create(appMenu);
     lv_obj_remove_style_all(appMenuPageDots[i]);
@@ -1110,7 +1159,16 @@ void refreshAppMenuTheme() {
   if (!appMenu) return;
   lv_obj_set_style_bg_color(appMenu, themePageBackground(), 0);
   for (uint8_t i = 0; i < appMenuTileCount; ++i)
-    applyAppTileTheme(appMenuTileButtons[i], appMenuTileColors[i]);
+    applyAppTileTheme(appMenuTileButtons[i],
+                      themeIsSpectrum() ? SPECTRUM_TILE_COLORS[i] : appMenuTileColors[i]);
+  const UiStr utilityIds[] = {STR_CALCULATOR, STR_NOTES, STR_STOPWATCH};
+  const uint32_t utilityColors[] = {UI_ACCENT_BLUE, UI_ACCENT_MINT, UI_ACCENT_ROSE};
+  for (uint8_t i = 0; i < 3; ++i) {
+    if (!utilityTileLabels[i]) continue;
+    lv_label_set_text(utilityTileLabels[i], tr(utilityIds[i]));
+    lv_obj_set_style_text_color(utilityTileLabels[i], appTileIconColor(themeIsSpectrum() ? SPECTRUM_TILE_COLORS[13 + i] : utilityColors[i]), 0);
+    lv_obj_center(utilityTileLabels[i]);
+  }
   for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
     if (appMenuPageDots[i])
       lv_obj_set_style_bg_color(appMenuPageDots[i], themeText(), 0);

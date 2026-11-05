@@ -52,6 +52,10 @@ const lv_font_t *currentStandbyClockFont() {
     case CLOCK_FONT_AUDIOWIDE: return &lv_font_audiowide_96;
     case CLOCK_FONT_CINZEL: return &lv_font_cinzel_96;
     case CLOCK_FONT_BEBASNEUE: return &lv_font_bebasneue_96;
+    case CLOCK_FONT_DIGITALNUMBERS: return &lv_font_digitalnumbers_96;
+    case CLOCK_FONT_RAJDHANI: return &lv_font_rajdhani_96;
+    case CLOCK_FONT_ROBOTOMONO: return &lv_font_robotomono_96;
+    case CLOCK_FONT_NEONLINES: return &lv_font_neonlines_96;
     default: return &lv_font_montserrat_time_96;
   }
 }
@@ -66,6 +70,10 @@ const lv_font_t *currentClockFont() {
     case CLOCK_FONT_AUDIOWIDE: return &lv_font_audiowide_48;
     case CLOCK_FONT_CINZEL: return &lv_font_cinzel_48;
     case CLOCK_FONT_BEBASNEUE: return &lv_font_bebasneue_48;
+    case CLOCK_FONT_DIGITALNUMBERS: return &lv_font_digitalnumbers_48;
+    case CLOCK_FONT_RAJDHANI: return &lv_font_rajdhani_48;
+    case CLOCK_FONT_ROBOTOMONO: return &lv_font_robotomono_48;
+    case CLOCK_FONT_NEONLINES: return &lv_font_neonlines_48;
     default: return &lv_font_montserrat_48;
   }
 }
@@ -80,6 +88,10 @@ const char *clockFontShortName(uint8_t index) {
     case CLOCK_FONT_AUDIOWIDE: return "AUD";
     case CLOCK_FONT_CINZEL: return "CIN";
     case CLOCK_FONT_BEBASNEUE: return "BEB";
+    case CLOCK_FONT_DIGITALNUMBERS: return "DIG";
+    case CLOCK_FONT_RAJDHANI: return "RAJ";
+    case CLOCK_FONT_ROBOTOMONO: return "RMO";
+    case CLOCK_FONT_NEONLINES: return "NEO";
     default: return "MON";
   }
 }
@@ -484,6 +496,14 @@ bool initDisplayAndLvgl() {
   logClockFontStatus("Audiowide 96", &lv_font_audiowide_96);
   logClockFontStatus("Cinzel 96", &lv_font_cinzel_96);
   logClockFontStatus("BebasNeue 96", &lv_font_bebasneue_96);
+  logClockFontStatus("digitalnumbers 48", &lv_font_digitalnumbers_48);
+  logClockFontStatus("digitalnumbers 96", &lv_font_digitalnumbers_96);
+  logClockFontStatus("rajdhani 48", &lv_font_rajdhani_48);
+  logClockFontStatus("rajdhani 96", &lv_font_rajdhani_96);
+  logClockFontStatus("robotomono 48", &lv_font_robotomono_48);
+  logClockFontStatus("robotomono 96", &lv_font_robotomono_96);
+  logClockFontStatus("Neon Lines 48", &lv_font_neonlines_48);
+  logClockFontStatus("Neon Lines 96", &lv_font_neonlines_96);
   constexpr uint16_t FALLBACK_DRAW_LINES = 40;
   const uint32_t fullScreenPixels =
     static_cast<uint32_t>(SCREEN_WIDTH) * SCREEN_HEIGHT;

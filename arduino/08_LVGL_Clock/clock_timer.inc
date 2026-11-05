@@ -260,20 +260,22 @@ void createTimerPage(lv_obj_t *screen) {
   for (uint8_t i = 0; i < 4; ++i) {
     char label[8];
     snprintf(label, sizeof(label), "%um", presets[i]);
-    lv_obj_t *button = createTimerTextButton(timerPage, 42 + i * 102, 282, 92,
+    lv_obj_t *button = createTimerTextButton(timerPage, 42 + i * 102, 260, 92,
                                              label, timerPresetEvent, presets[i]);
     (void)button;
   }
 
-  createTimerTextButton(timerPage, 40, 360, 100, "-1m", timerMinusEvent, 0);
-  lv_obj_t *startButton = createTimerTextButton(timerPage, 156, 360, 168,
+  createTimerTextButton(timerPage, 40, 326, 100, "-1m", timerMinusEvent, 0);
+  lv_obj_t *startButton = createTimerTextButton(timerPage, 156, 326, 168,
                                                 tr(STR_TIMER_START), timerStartEvent, 0);
   timerStartLabel = lv_obj_get_child(startButton, 0);
-  createTimerTextButton(timerPage, 340, 360, 100, "+1m", timerPlusEvent, 0);
-  createTimerTextButton(timerPage, 156, 428, 168, tr(STR_TIMER_RESET), timerResetEvent, 0);
+  createTimerTextButton(timerPage, 340, 326, 100, "+1m", timerPlusEvent, 0);
+  createTimerTextButton(timerPage, 156, 385, 168, tr(STR_TIMER_RESET), timerResetEvent, 0);
 
   lv_obj_t *hint = lv_label_create(timerPage);
   i18nRegister(hint, STR_TIMER_HINT);
+  lv_obj_set_width(hint, 460);
+  lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_font(hint, &lv_font_ui_16, 0);
   lv_obj_set_style_text_color(hint, themeTextDim(0x777D8D), 0);
   lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -16);
