@@ -166,6 +166,7 @@ void setUiTheme(uint8_t theme, bool persist) {
   if (theme == uiTheme) return;
   uiTheme = theme;
   if (persist) preferences.putUChar("ui_theme", uiTheme);
+  Serial.printf("UI: theme -> %u (refresh requested)\n", uiTheme);
   requestUiAppearanceChange();
 }
 

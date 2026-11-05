@@ -687,6 +687,27 @@ void loop() {
     portalRequested = false;
     startConfigPortal();
   }
+  // Safety net: no real fade lasts longer than ~1.6 s (asset fade frame wait is
+  // capped at 1500 ms). If the transition flag has been continuously latched
+  // well beyond that, some cancelled/interrupted fade failed to release it;
+  // force it open so theme, font and image requests can never be starved.
+  {
+    static uint32_t screenFadeLatchedAtMs = 0;
+    static bool screenFadeLatchValid = false;
+    if (screenFadeTransitionActive) {
+      if (!screenFadeLatchValid) {
+        screenFadeLatchedAtMs = millis();
+        screenFadeLatchValid = true;
+      } else if (millis() - screenFadeLatchedAtMs > 3000) {
+        Serial.println("UI: screen-fade flag stuck; releasing transition gate");
+        screenFadeTransitionActive = false;
+        screenFadeLatchValid = false;
+      }
+    } else {
+      screenFadeLatchValid = false;
+    }
+  }
+
   if (imageReloadRequested && !screenFadeTransitionActive) {
     imageReloadRequested = false;
     showCurrentImage(true);
@@ -715,6 +736,7 @@ void loop() {
   }
   if (uiAppearanceChangeRequested && !screenFadeTransitionActive) {
     uiAppearanceChangeRequested = false;
+    Serial.printf("UI: applying appearance (theme %u)\n", uiTheme);
     beginScreenFade(activeBrightness);
     applyUiAppearance();
     lv_obj_invalidate(lv_scr_act());
