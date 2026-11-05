@@ -65,6 +65,10 @@ static void testTimer(int16_t w, int16_t h) {
   for (const Rect &r : all) inside(r, w, h, "timer");
   for (const Rect &r : l.presets) inside(r, w, h, "preset");
   separated(l.back, l.title, "timer header");
+  const Rect back = appBack(w, h);
+  inside(back, w, h, "app back safe area");
+  assert(back.x >= scale(16, w) && back.y >= scale(16, h) &&
+         back.w >= scale(44, w) && back.h >= scale(44, h));
   separated(l.time, l.status, "time/status");
   separated(l.status, l.progress, "status/progress");
   separated(l.progress, l.presets[0], "progress/presets");
@@ -137,7 +141,7 @@ int main() {
   assert(migrateTheme(255, false) == THEME_GLOW);
   for (uint8_t current = 0; current < THEME_COUNT; ++current) assert(migrateTheme(current, true) == current);
   assert(migrateTheme(THEME_COUNT, true) == THEME_GLOW);
-  assert(clockSizePixels(0) == 48 && clockSizePixels(1) == 72 && clockSizePixels(2) == 96);
+  assert(clockSizePixels(0) == 48 && clockSizePixels(1) == 72 && clockSizePixels(2) == 120);
   assert(normalizeClockSize(200) == CLOCK_SIZE_DEFAULT);
   const int16_t sizes[][2] = {{480, 480}, {600, 600}, {480, 360}, {360, 360}};
   for (const auto &size : sizes) {

@@ -19,6 +19,8 @@ constexpr int16_t APP_MENU_TILE_TOP = 52;
 constexpr int16_t APP_MENU_TILE_GAP_X = 24;
 constexpr int16_t APP_MENU_TILE_GAP_Y = 24;
 constexpr uint8_t APP_MENU_ITEMS_PER_PAGE = 4;
+lv_obj_t *calendarBackButton = nullptr;
+lv_obj_t *calendarTodayButton = nullptr;
 lv_obj_t *clockModeSelector = nullptr;
 bool clockModeChoiceBusy = false;
 uint32_t clockModeChoiceSuppressedUntil = 0;
@@ -34,7 +36,8 @@ uint32_t powerOffChoiceSuppressedUntil = 0;
 // rebuilding the menu. The base color is the per-app accent used in the black
 // theme; amber uses a translucent CRT-phosphor tint and Icon Glow uses a
 // translucent tint of each tile's own color.
-constexpr uint8_t APP_MENU_TILE_CAPACITY = 16;
+constexpr uint8_t APP_MENU_TILE_CAPACITY = 22;
+constexpr uint8_t EXTENSION_APP_COUNT = 6;
 lv_obj_t *appMenuTileButtons[APP_MENU_TILE_CAPACITY] = {};
 uint32_t appMenuTileColors[APP_MENU_TILE_CAPACITY] = {};
 // Indexed by launcher tile creation order, including the three utility apps.
@@ -44,7 +47,8 @@ constexpr uint32_t SPECTRUM_TILE_COLORS[APP_MENU_TILE_CAPACITY] = {
   0xFFB020, 0xFF5C7A, 0xA8B6FF, 0x46A8FF,
   0x3FE0D0, 0xFF558F, 0xB57AFF, 0x53F0AA,
   0x43E8FF, 0xFF6551, 0x6B9CFF, 0xE96AFF,
-  0xFFE05C, 0x8CE85A, 0xFF9656, 0xE8A4FF
+  0xFFE05C, 0x8CE85A, 0xFF9656, 0xE8A4FF,
+  0x69D2FF, 0xFF7B9C, 0x9DE879, 0x53E0D0, 0xFFBD66, 0xC5A3FF
 };
 uint8_t appMenuTileCount = 0;
 
@@ -64,7 +68,13 @@ enum AppMenuItem : uint8_t {
   APP_MENU_TIMER,
   APP_MENU_CALCULATOR,
   APP_MENU_NOTES,
-  APP_MENU_STOPWATCH
+  APP_MENU_STOPWATCH,
+  APP_MENU_SUBSONIC,
+  APP_MENU_RECORDER,
+  APP_MENU_GAMEBOY,
+  APP_MENU_WIFI_HUD,
+  APP_MENU_SAMPLER,
+  APP_MENU_VAULT
 };
 
 void cancelPendingAppLaunches() {
@@ -77,6 +87,7 @@ void cancelPendingAppLaunches() {
   weatherPageShowRequested = false;
   weatherInfoPageShowRequested = false;
   appMenuHideRequested = false;
+  cancelExtensionLaunches();
 }
 
 void consumeCurrentTouchRelease() {
@@ -208,6 +219,16 @@ void applyCalendarLocalization() {
 void refreshCalendarTheme() {
   if (!calendarPage) return;
   lv_obj_set_style_bg_color(calendarPage, themePageBackground(), 0);
+  if (calendarBackButton) {
+    lv_obj_set_style_bg_color(calendarBackButton, themeControlSurface(UI_ACCENT_BLUE), 0);
+    if (lv_obj_get_child_cnt(calendarBackButton))
+      setTablerIconColor(lv_obj_get_child(calendarBackButton, 0), themeIcon());
+  }
+  if (calendarTodayButton) {
+    lv_obj_set_style_bg_color(calendarTodayButton, themeControlSurface(UI_ACCENT_BLUE), 0);
+    if (lv_obj_get_child_cnt(calendarTodayButton))
+      lv_obj_set_style_text_color(lv_obj_get_child(calendarTodayButton, 0), themeText(), 0);
+  }
   if (!calendarWidget) return;
   lv_obj_set_style_bg_color(calendarWidget, themePageBackground(), 0);
   lv_obj_set_style_text_color(calendarWidget, themeText(), 0);
@@ -217,10 +238,14 @@ void refreshCalendarTheme() {
     if (monthLabel) lv_obj_set_style_text_color(monthLabel, themeText(), 0);
     for (uint32_t i = 0; i < lv_obj_get_child_cnt(header); ++i) {
       lv_obj_t *child = lv_obj_get_child(header, i);
-      if (lv_obj_get_child_cnt(child))
+      if (lv_obj_get_child_cnt(child)) {
+        lv_obj_set_style_bg_color(child, themeControlSurface(UI_ACCENT_BLUE), LV_PART_MAIN);
         setTablerIconColor(lv_obj_get_child(child, 0), themeIcon());
+      }
     }
   }
+  lv_obj_t *dayMatrix = lv_calendar_get_btnmatrix(calendarWidget);
+  if (dayMatrix) lv_obj_invalidate(dayMatrix);
   applyCalendarLocalization();
 }
 
@@ -232,7 +257,7 @@ void showAppMenu(bool fade) {
       audiobookPageShowRequested || weatherPageVisible ||
       weatherPageShowRequested || weatherInfoPageVisible ||
       weatherInfoPageShowRequested || worldClockPageVisible ||
-      photoFramePageVisible || timerPageVisible) return;
+      photoFramePageVisible || timerPageVisible || extensionAppVisible()) return;
   if (fade) {
     appMenuHideRequested = false;
     appMenuShowRequested = true;
@@ -292,6 +317,55 @@ void hideCalendarPage(bool fade, bool returnToMenu) {
   calendarPageShowRequested = false;
   lv_obj_add_flag(calendarPage, LV_OBJ_FLAG_HIDDEN);
   if (returnToMenu && !lowPowerMode) showAppMenu(false);
+}
+
+void calendarBackEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) == LV_EVENT_CLICKED) hideCalendarPage(true, true);
+}
+
+void calendarTodayEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  markUserActivity();
+  updateCalendarToday();
+  if (calendarPage) lv_obj_invalidate(calendarPage);
+}
+
+// Rounded, mostly-off calendar cells. The stock LVGL draw callback runs first;
+// this callback replaces its square borders and grey disabled cells with the
+// active theme's accent tint and a soft today highlight.
+void calendarDrawPartEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_DRAW_PART_BEGIN) return;
+  lv_obj_draw_part_dsc_t *dsc = static_cast<lv_obj_draw_part_dsc_t *>(lv_event_get_param(event));
+  if (!dsc || dsc->part != LV_PART_ITEMS || !dsc->rect_dsc || !dsc->label_dsc) return;
+  lv_obj_t *matrix = lv_event_get_target(event);
+  const lv_color_t accent = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
+  dsc->rect_dsc->radius = 16;
+  dsc->rect_dsc->bg_opa = LV_OPA_TRANSP;
+  dsc->rect_dsc->border_opa = LV_OPA_TRANSP;
+  dsc->rect_dsc->border_width = 0;
+  if (dsc->id < 7) {
+    dsc->label_dsc->color = themeTextDim(0x9AA3B2);
+    dsc->label_dsc->font = &lv_font_ui_16;
+    return;
+  }
+  dsc->label_dsc->font = &lv_font_ui_24;
+  if (lv_btnmatrix_has_btn_ctrl(matrix, dsc->id, LV_BTNMATRIX_CTRL_DISABLED)) {
+    dsc->label_dsc->color = themeTextDim(0x5A6372);
+    return;
+  }
+  const bool weekend = (dsc->id % 7) == 0 || (dsc->id % 7) == 6;
+  dsc->label_dsc->color = weekend ? themeTextDim(0xB8C2D0) : themeText();
+  if (lv_btnmatrix_has_btn_ctrl(matrix, dsc->id, LV_BTNMATRIX_CTRL_CUSTOM_1)) {
+    dsc->rect_dsc->bg_color = accent;
+    dsc->rect_dsc->bg_opa = LV_OPA_20;
+    dsc->rect_dsc->border_color = accent;
+    dsc->rect_dsc->border_opa = LV_OPA_COVER;
+    dsc->rect_dsc->border_width = 2;
+    dsc->label_dsc->color = accent;
+  } else if (lv_btnmatrix_has_btn_ctrl(matrix, dsc->id, LV_BTNMATRIX_CTRL_CUSTOM_2)) {
+    dsc->rect_dsc->bg_color = accent;
+    dsc->rect_dsc->bg_opa = LV_OPA_30;
+  }
 }
 
 void requestCalendarMonthStep(int8_t direction) {
@@ -460,7 +534,7 @@ void appMenuItemEvent(lv_event_t *event) {
       static_cast<int32_t>(now - appMenuClickSuppressedUntil) < 0) return;
   const AppMenuItem item = static_cast<AppMenuItem>(
     reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
-  if (item > APP_MENU_STOPWATCH) return;
+  if (item >= APP_MENU_SUBSONIC + EXTENSION_APP_COUNT) return;
   // Guard every normal click too, not only a preceding swipe. CST9217 can
   // occasionally report another press after release, especially near a
   // rotation; without this lock the second sample could launch another tile.
@@ -500,6 +574,8 @@ void appMenuItemEvent(lv_event_t *event) {
     showTimerPage(true);
   } else if (item >= APP_MENU_CALCULATOR && item <= APP_MENU_STOPWATCH) {
     openUtilityApp(static_cast<uint8_t>(item - APP_MENU_CALCULATOR));
+  } else if (item >= APP_MENU_SUBSONIC) {
+    requestExtensionApp(item - APP_MENU_SUBSONIC);
   } else {
     // The Settings tile exposes the same configuration page served over the
     // normal Wi-Fi connection, but through a predictable local hotspot.
@@ -543,19 +619,7 @@ void createWifiSetupPage() {
                     LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_flag(wifiSetupPage, LV_OBJ_FLAG_CLICKABLE);
 
-  lv_obj_t *backButton = lv_btn_create(wifiSetupPage);
-  lv_obj_set_size(backButton, 56, 56);
-  lv_obj_align(backButton, LV_ALIGN_TOP_LEFT, 22, 22);
-  lv_obj_set_style_radius(backButton, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(backButton, lv_color_hex(themeSurface(0x0A0A0A)), 0);
-  lv_obj_set_style_bg_opa(backButton, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(backButton, 1, 0);
-  lv_obj_set_style_border_color(backButton, lv_color_hex(themeBorder(0x2A2A2A)), 0);
-  lv_obj_set_style_shadow_width(backButton, 0, 0);
-  lv_obj_clear_flag(backButton,
-                    LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
-  lv_obj_add_event_cb(backButton, wifiSetupBackEvent, LV_EVENT_CLICKED, nullptr);
-  createTablerIcon(backButton, TABLER_ICON_CHEVRON_LEFT, 30, themeIcon());
+  createAppBackButton(wifiSetupPage, wifiSetupBackEvent, UI_ACCENT_BLUE);
 
   lv_obj_t *title = lv_label_create(wifiSetupPage);
   i18nRegister(title, STR_WIFI_SETUP);
@@ -706,24 +770,23 @@ void clockModeChoiceEvent(lv_event_t *event) {
   else if (choice == 1) showWeatherWallpaperPage(true);
 }
 
+lv_color_t appTileIconColor(uint32_t accent);
+void applyAppTileTheme(lv_obj_t *button, uint32_t color);
+
 lv_obj_t *createClockModeButton(lv_obj_t *parent, int16_t x,
                                 const lv_img_dsc_t *icon,
                                 uint32_t color, uintptr_t choice) {
   lv_obj_t *button = lv_btn_create(parent);
   lv_obj_set_pos(button, x, 94);
   lv_obj_set_size(button, 156, 156);
-  lv_obj_set_style_radius(button, 30, 0);
-  lv_obj_set_style_bg_color(button, lv_color_hex(themeAccent(color)), 0);
-  lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(button, themeIsAmber() ? 2 : 1, 0);
-  lv_obj_set_style_border_color(button,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER)
-                 : lv_color_hex(themeBorder(0xFFFFFF)), 0);
-  lv_obj_set_style_border_opa(button, themeIsAmber() ? LV_OPA_COVER : LV_OPA_20, 0);
+  lv_obj_set_style_radius(button, 38, 0);
+  lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_event_cb(button, clockModeChoiceEvent, LV_EVENT_CLICKED,
                       reinterpret_cast<void *>(choice));
-  createOfficialTablerIcon(button, icon,
-    themeIsAmber() ? lv_color_hex(CRT_AMBER) : themeTextOnAccent());
+  createOfficialTablerIcon(button, icon, appTileIconColor(color));
+  // Use the same translucent Glow tile treatment as the launcher instead of
+  // a solid stock-style accent block.
+  applyAppTileTheme(button, color);
   return button;
 }
 
@@ -1003,45 +1066,67 @@ void createCalendarPage(lv_obj_t *screen) {
   lv_obj_add_flag(calendarPage, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(calendarPage, appPageGestureEvent, LV_EVENT_GESTURE, nullptr);
 
+  calendarBackButton = createAppBackButton(calendarPage, calendarBackEvent, UI_ACCENT_BLUE);
+  calendarTodayButton = lv_btn_create(calendarPage);
+  lv_obj_set_align(calendarTodayButton, LV_ALIGN_TOP_LEFT);
+  lv_obj_set_pos(calendarTodayButton, SCREEN_WIDTH - 112, 28);
+  lv_obj_set_size(calendarTodayButton, 88, 48);
+  lv_obj_set_style_radius(calendarTodayButton, 24, 0);
+  lv_obj_set_style_bg_color(calendarTodayButton, themeControlSurface(UI_ACCENT_BLUE), 0);
+  lv_obj_set_style_bg_opa(calendarTodayButton, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(calendarTodayButton, 0, 0);
+  lv_obj_set_style_shadow_width(calendarTodayButton, 0, 0);
+  lv_obj_clear_flag(calendarTodayButton, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(calendarTodayButton, LV_OBJ_FLAG_GESTURE_BUBBLE);
+  lv_obj_add_event_cb(calendarTodayButton, calendarTodayEvent, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *todayLabel = lv_label_create(calendarTodayButton);
+  i18nRegister(todayLabel, STR_TODAY);
+  lv_obj_set_style_text_font(todayLabel, &lv_font_ui_16, 0);
+  lv_obj_set_style_text_color(todayLabel, themeText(), 0);
+  lv_obj_center(todayLabel);
+
   calendarWidget = lv_calendar_create(calendarPage);
-  lv_obj_set_pos(calendarWidget, 0, 0);
-  lv_obj_set_size(calendarWidget, SCREEN_WIDTH, SCREEN_HEIGHT);
-  lv_obj_set_style_radius(calendarWidget, 0, 0);
+  lv_obj_set_align(calendarWidget, LV_ALIGN_TOP_LEFT);
+  lv_obj_set_pos(calendarWidget, 16, 88);
+  lv_obj_set_size(calendarWidget, SCREEN_WIDTH - 32, SCREEN_HEIGHT - 104);
+  lv_obj_set_style_radius(calendarWidget, 24, 0);
   lv_obj_set_style_bg_color(calendarWidget, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(calendarWidget, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(calendarWidget, 0, 0);
-  lv_obj_set_style_pad_all(calendarWidget, 18, 0);
+  lv_obj_set_style_pad_all(calendarWidget, 8, 0);
   lv_obj_set_style_text_color(calendarWidget, themeText(), 0);
   lv_obj_clear_flag(calendarWidget,
                     LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_t *header = lv_calendar_header_arrow_create(calendarWidget);
-  lv_obj_set_height(header, 64);
+  lv_obj_set_height(header, 56);
   lv_obj_clear_flag(header, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_t *previousMonthButton = lv_obj_get_child(header, 0);
   lv_obj_t *monthLabel = lv_obj_get_child(header, 1);
   lv_obj_t *nextMonthButton = lv_obj_get_child(header, 2);
-  lv_obj_set_size(previousMonthButton, 64, 64);
-  lv_obj_set_size(nextMonthButton, 64, 64);
-  lv_obj_set_style_text_font(monthLabel, &lv_font_ui_30, 0);
-  lv_obj_set_style_text_font(previousMonthButton, &lv_font_ui_30, 0);
-  lv_obj_set_style_text_font(nextMonthButton, &lv_font_ui_30, 0);
+  lv_obj_t *monthButtons[] = {previousMonthButton, nextMonthButton};
+  for (lv_obj_t *button : monthButtons) {
+    lv_obj_set_size(button, 48, 48);
+    lv_obj_set_style_radius(button, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(button, themeControlSurface(UI_ACCENT_BLUE), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_40, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(button, 0, 0);
+    lv_obj_set_style_shadow_width(button, 0, 0);
+    lv_obj_set_style_bg_img_src(button, nullptr, 0);
+  }
+  lv_obj_set_style_text_font(monthLabel, &lv_font_ui_24, 0);
   lv_obj_set_style_text_color(monthLabel, themeText(), 0);
   applyCalendarLocalization();
-  lv_obj_set_style_bg_opa(previousMonthButton, LV_OPA_TRANSP, LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(previousMonthButton, LV_OPA_TRANSP,
-                          LV_PART_MAIN | LV_STATE_PRESSED);
-  lv_obj_set_style_bg_opa(nextMonthButton, LV_OPA_TRANSP, LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(nextMonthButton, LV_OPA_TRANSP,
-                          LV_PART_MAIN | LV_STATE_PRESSED);
-  lv_obj_set_style_shadow_width(previousMonthButton, 0, 0);
-  lv_obj_set_style_shadow_width(nextMonthButton, 0, 0);
-  lv_obj_set_style_bg_img_src(previousMonthButton, nullptr, 0);
-  lv_obj_set_style_bg_img_src(nextMonthButton, nullptr, 0);
-  createTablerIcon(previousMonthButton, TABLER_ICON_CHEVRON_LEFT, 30, themeIcon());
-  createTablerIcon(nextMonthButton, TABLER_ICON_CHEVRON_RIGHT, 30, themeIcon());
+  createTablerIcon(previousMonthButton, TABLER_ICON_CHEVRON_LEFT, 24, themeIcon());
+  createTablerIcon(nextMonthButton, TABLER_ICON_CHEVRON_RIGHT, 24, themeIcon());
 
   lv_obj_t *dayMatrix = lv_calendar_get_btnmatrix(calendarWidget);
-  lv_obj_set_style_text_font(dayMatrix, &lv_font_ui_28, LV_PART_ITEMS);
+  lv_obj_set_style_text_font(dayMatrix, &lv_font_ui_24, LV_PART_ITEMS);
+  lv_obj_set_style_bg_opa(dayMatrix, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_set_style_border_width(dayMatrix, 0, LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(dayMatrix, LV_OPA_TRANSP, LV_PART_ITEMS);
+  lv_obj_set_style_border_width(dayMatrix, 0, LV_PART_ITEMS);
+  lv_obj_set_style_radius(dayMatrix, 16, LV_PART_ITEMS);
   // The calendar is a viewer, so dates do not need pressed/selected states.
   // Removing their touch redraws prevents many small rotated flushes while an
   // upward gesture crosses cells, which is visible as tearing at 90/270 deg.
@@ -1049,6 +1134,7 @@ void createCalendarPage(lv_obj_t *screen) {
                     LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_CLICK_FOCUSABLE |
                     LV_OBJ_FLAG_PRESS_LOCK | LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(dayMatrix, LV_OBJ_FLAG_GESTURE_BUBBLE);
+  lv_obj_add_event_cb(dayMatrix, calendarDrawPartEvent, LV_EVENT_DRAW_PART_BEGIN, nullptr);
   const uint32_t calendarChildCount = lv_obj_get_child_cnt(calendarWidget);
   for (uint32_t i = 0; i < calendarChildCount; ++i) {
     lv_obj_t *child = lv_obj_get_child(calendarWidget, i);
@@ -1114,8 +1200,7 @@ void createAppMenu() {
   createTablerAppIcon(musicButton, &tabler_music);
   lv_obj_t *audiobookButton = createAppTile(
     appMenuPages[1], APP_MENU_AUDIOBOOK, 3, UI_ACCENT_MINT);
-  createTablerIcon(audiobookButton, TABLER_ICON_AUDIOBOOK, APP_MENU_ICON_SIZE,
-    appTileIconColor(UI_ACCENT_MINT));
+  createTablerAppIcon(audiobookButton, &tabler_headphones);
 
   lv_obj_t *radioButton = createAppTile(
     appMenuPages[2], APP_MENU_RADIO, 0, UI_ACCENT_MINT);
@@ -1147,6 +1232,16 @@ void createAppMenu() {
     // child 0 so applyAppTileTheme() recolors it on theme change.
     createTablerIcon(tile, utilityIcons[i], APP_MENU_ICON_SIZE,
       appTileIconColor(utilityColors[i]));
+  }
+
+  const lv_img_dsc_t *extensionIcons[] = {&tabler_server_2, &tabler_microphone,
+    &tabler_device_gamepad_2, &tabler_radar_2, &tabler_piano, &tabler_lock_password};
+  const uint32_t extensionColors[] = {0x69D2FF, 0xFF7B9C, 0x9DE879,
+                                      0x53E0D0, 0xFFBD66, 0xC5A3FF};
+  for (uint8_t i = 0; i < EXTENSION_APP_COUNT; ++i) {
+    lv_obj_t *tile = createAppTile(appMenuPages[4 + i / 4],
+      static_cast<AppMenuItem>(APP_MENU_SUBSONIC + i), i % 4, extensionColors[i]);
+    createTablerAppIcon(tile, extensionIcons[i]);
   }
 
   for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
@@ -1205,19 +1300,7 @@ void refreshAppMenuTheme() {
         // Mode buttons are 156x156; the close key is 42x42 and the title is a
         // label. Recolor the two large buttons and the close icon.
         if (lv_obj_get_width(child) == 156) {
-          const bool amber = themeIsAmber();
-          const uint32_t keyAccent =
-            themeAccent(i == 1 ? UI_ACCENT_BLUE : UI_ACCENT_MINT);
-          lv_obj_set_style_bg_color(child,
-            amber ? lv_color_black() : lv_color_hex(keyAccent), 0);
-          lv_obj_set_style_border_width(child, amber ? 2 : 1, 0);
-          lv_obj_set_style_border_color(child,
-            amber ? lv_color_hex(CRT_AMBER)
-                  : lv_color_hex(themeBorder(0xFFFFFF)), 0);
-          lv_obj_set_style_border_opa(child, amber ? LV_OPA_COVER : LV_OPA_20, 0);
-          if (lv_obj_get_child_cnt(child))
-            lv_obj_set_style_img_recolor(lv_obj_get_child(child, 0),
-              amber ? lv_color_hex(CRT_AMBER) : themeTextOnAccent(), 0);
+          applyAppTileTheme(child, i == 1 ? UI_ACCENT_BLUE : UI_ACCENT_MINT);
         }
       }
     }

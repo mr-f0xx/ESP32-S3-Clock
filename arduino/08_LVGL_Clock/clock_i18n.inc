@@ -158,6 +158,7 @@ enum UiStr : uint16_t {
   STR_CLOCK_FONT,
   STR_CLOCK_COLOR,
   STR_THEME_AMBER,
+  STR_TODAY,
   STR_COUNT
 };
 
@@ -322,6 +323,7 @@ static const char *const UI_TEXT[STR_COUNT][UI_LANG_COUNT] = {
   /* STR_CLOCK_FONT */ {"Font", "Police"},
   /* STR_CLOCK_COLOR */ {"Color", "Couleur"},
   /* STR_THEME_AMBER */ {"CRT Amber", "Ambre CRT"},
+  /* STR_TODAY */ {"Today", "Aujourd'hui"},
 };
 
 inline const char *tr(UiStr id) {
@@ -362,10 +364,10 @@ static const char *const CALENDAR_MONTHS[UI_LANG_COUNT][12] = {
   {"Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août",
    "Septembre", "Octobre", "Novembre", "Décembre"},
 };
-// LVGL's calendar week starts on Monday.
+// Match lv_conf.h: LV_CALENDAR_WEEK_STARTS_MONDAY is 0 (Sunday first).
 static const char *const CALENDAR_DAYS[UI_LANG_COUNT][7] = {
-  {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"},
-  {"Lu", "Ma", "Me", "Je", "Ve", "Sa", "Di"},
+  {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"},
+  {"Di", "Lu", "Ma", "Me", "Je", "Ve", "Sa"},
 };
 
 const char *calendarMonthName(uint8_t monthIndex) {

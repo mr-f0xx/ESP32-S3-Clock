@@ -25,6 +25,12 @@ constexpr Rect rect(int16_t x, int16_t y, int16_t w, int16_t h,
   return {scale(x, width), scale(y, height), scale(w, width), scale(h, height)};
 }
 
+// Shared safe-area back button. Every full-screen app uses this rectangle so
+// the glyph can never sit under a rounded corner or outside the parent clip.
+inline Rect appBack(int16_t width, int16_t height) {
+  return rect(24, 24, 56, 56, width, height);
+}
+
 // Version 2 removes the old AMOLED Black entry and moves Icon Glow to ID 0.
 // The other six themes kept their historical IDs, so only the retired default
 // and the old Glow ID need remapping.
@@ -41,7 +47,7 @@ constexpr uint8_t normalizeClockSize(uint8_t size) {
   return size < CLOCK_SIZE_COUNT ? size : CLOCK_SIZE_DEFAULT;
 }
 constexpr uint8_t clockSizePixels(uint8_t size) {
-  return normalizeClockSize(size) == 0 ? 48 : (normalizeClockSize(size) == 1 ? 72 : 96);
+  return normalizeClockSize(size) == 0 ? 48 : (normalizeClockSize(size) == 1 ? 72 : 120);
 }
 
 struct Control {
@@ -56,27 +62,28 @@ inline Control control(int16_t width, int16_t height) {
   auto r = [&](int16_t x, int16_t y, int16_t w, int16_t h) {
     return rect(x, y, w, h, width, height);
   };
-  l.batteryIcon = r(20, 10, 56, 56);
-  l.battery = r(96, 18, 120, 40);
-  l.close = r(416, 16, 44, 44);
+  l.batteryIcon = r(24, 16, 40, 40);
+  l.battery = r(76, 20, 140, 32);
+  l.close = r(412, 16, 44, 44);
   for (uint8_t i = 0; i < 5; ++i)
     l.settings[i] = r(20 + (i % 3) * 150, 72 + (i / 3) * 52, 140, 44);
-  l.wifi = r(20, 184, 214, 104);
-  l.rotation = r(246, 184, 214, 104);
-  l.wifiIcon = r(32, 206, 56, 56);
-  l.wifiStatus = r(104, 202, 120, 28);
-  l.wifiIp = r(104, 234, 120, 24);
-  l.rotationIcon = r(258, 206, 56, 56);
-  l.rotationStatus = r(330, 212, 120, 44);
-  l.brightnessIcon = r(20, 322, 48, 48);
-  l.brightnessTitle = r(88, 300, 292, 22);
-  l.brightnessTrack = r(88, 340, 292, 12);
-  l.brightnessValue = r(394, 326, 66, 40);
-  l.volumeIcon = r(20, 400, 48, 48);
-  l.volumeTitle = r(88, 378, 292, 22);
-  l.volumeTrack = r(88, 418, 292, 12);
-  l.volumeValue = r(394, 404, 66, 40);
-  l.hint = r(20, 452, 440, 22);
+  // Compact connectivity cards: subtle tint, 40 px icon, readable status.
+  l.wifi = r(24, 184, 208, 88);
+  l.rotation = r(248, 184, 208, 88);
+  l.wifiIcon = r(40, 208, 40, 40);
+  l.wifiStatus = r(92, 200, 124, 24);
+  l.wifiIp = r(92, 228, 124, 20);
+  l.rotationIcon = r(264, 208, 40, 40);
+  l.rotationStatus = r(316, 208, 124, 40);
+  l.brightnessIcon = r(24, 308, 32, 32);
+  l.brightnessTitle = r(72, 292, 300, 22);
+  l.brightnessTrack = r(72, 330, 300, 12);
+  l.brightnessValue = r(388, 314, 68, 36);
+  l.volumeIcon = r(24, 386, 32, 32);
+  l.volumeTitle = r(72, 370, 300, 22);
+  l.volumeTrack = r(72, 408, 300, 12);
+  l.volumeValue = r(388, 392, 68, 36);
+  l.hint = r(24, 448, 432, 24);
   l.knobOverhang = scale(10, width);
   return l;
 }
@@ -90,8 +97,8 @@ inline Timer timer(int16_t width, int16_t height) {
   auto r = [&](int16_t x, int16_t y, int16_t w, int16_t h) {
     return rect(x, y, w, h, width, height);
   };
-  l.back = r(20, 20, 48, 48);
-  l.title = r(84, 26, 312, 36);
+  l.back = r(24, 24, 56, 56);
+  l.title = r(96, 28, 288, 36);
   l.time = r(24, 90, 432, 108);
   l.status = r(40, 204, 400, 28);
   l.progress = r(40, 236, 400, 3);

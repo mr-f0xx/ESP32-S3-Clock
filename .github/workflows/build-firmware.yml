@@ -108,8 +108,11 @@ jobs:
       - name: Run native regression tests
         run: |
           bash tests/run_launcher_icons_test.sh
+          bash tests/run_ui_regressions_test.sh
           bash tests/run_clock_layout_test.sh
           bash tests/run_clock_fonts_test.sh
+          bash tests/run_extension_apps_test.sh
+          bash tests/run_vault_crypto_test.sh
           g++ -std=c++17 -Wall -Wextra -Werror tests/utility_calculator_test.cpp -o /tmp/utility_calculator_test
           /tmp/utility_calculator_test
 

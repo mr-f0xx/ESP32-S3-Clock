@@ -43,24 +43,34 @@ void initUiFonts() {
 // top-left clock over a wallpaper.
 bool mainClockCentered = false;
 
+// The clock is split into hour / colon / minute labels so the colon can blink
+// without changing digit advance widths. timeLabel is their shared row.
+lv_obj_t *timeHourLabel = nullptr;
+lv_obj_t *timeColonLabel = nullptr;
+lv_obj_t *timeMinuteLabel = nullptr;
+uint32_t lastBurnInShiftAt = 0;
+uint8_t burnInPhase = 0;
+int8_t burnInOffsetX = 0;
+int8_t burnInOffsetY = 0;
+
 // Native bitmap sizes keep glyph bounds exact in awake, centered and standby
-// modes. The default remains 96 px; smaller choices also fit over wallpapers.
+// modes. Large is now 120 px; smaller choices also fit over wallpapers.
 const lv_font_t *clockFontForPixels(uint8_t pixels) {
   const bool medium = pixels == 72;
   const bool small = pixels == 48;
   switch (clockFontIndex) {
-    case CLOCK_FONT_KAMERON: return medium ? &lv_font_kameron_72 : small ? &lv_font_kameron_48 : &lv_font_kameron_96;
-    case CLOCK_FONT_SILKSCREEN: return medium ? &lv_font_silkscreen_72 : small ? &lv_font_silkscreen_48 : &lv_font_silkscreen_96;
-    case CLOCK_FONT_DOTGOTHIC16: return medium ? &lv_font_dotgothic16_72 : small ? &lv_font_dotgothic16_48 : &lv_font_dotgothic16_96;
-    case CLOCK_FONT_ORBITRON: return medium ? &lv_font_orbitron_72 : small ? &lv_font_orbitron_48 : &lv_font_orbitron_96;
-    case CLOCK_FONT_AUDIOWIDE: return medium ? &lv_font_audiowide_72 : small ? &lv_font_audiowide_48 : &lv_font_audiowide_96;
-    case CLOCK_FONT_CINZEL: return medium ? &lv_font_cinzel_72 : small ? &lv_font_cinzel_48 : &lv_font_cinzel_96;
-    case CLOCK_FONT_BEBASNEUE: return medium ? &lv_font_bebasneue_72 : small ? &lv_font_bebasneue_48 : &lv_font_bebasneue_96;
-    case CLOCK_FONT_DIGITALNUMBERS: return medium ? &lv_font_digitalnumbers_72 : small ? &lv_font_digitalnumbers_48 : &lv_font_digitalnumbers_96;
-    case CLOCK_FONT_RAJDHANI: return medium ? &lv_font_rajdhani_72 : small ? &lv_font_rajdhani_48 : &lv_font_rajdhani_96;
-    case CLOCK_FONT_ROBOTOMONO: return medium ? &lv_font_robotomono_72 : small ? &lv_font_robotomono_48 : &lv_font_robotomono_96;
-    case CLOCK_FONT_NEONLINES: return medium ? &lv_font_neonlines_72 : small ? &lv_font_neonlines_48 : &lv_font_neonlines_96;
-    default: return medium ? &lv_font_montserrat_time_72 : small ? &lv_font_montserrat_48 : &lv_font_montserrat_time_96;
+    case CLOCK_FONT_KAMERON: return medium ? &lv_font_kameron_72 : small ? &lv_font_kameron_48 : &lv_font_kameron_120;
+    case CLOCK_FONT_SILKSCREEN: return medium ? &lv_font_silkscreen_72 : small ? &lv_font_silkscreen_48 : &lv_font_silkscreen_120;
+    case CLOCK_FONT_DOTGOTHIC16: return medium ? &lv_font_dotgothic16_72 : small ? &lv_font_dotgothic16_48 : &lv_font_dotgothic16_120;
+    case CLOCK_FONT_ORBITRON: return medium ? &lv_font_orbitron_72 : small ? &lv_font_orbitron_48 : &lv_font_orbitron_120;
+    case CLOCK_FONT_AUDIOWIDE: return medium ? &lv_font_audiowide_72 : small ? &lv_font_audiowide_48 : &lv_font_audiowide_120;
+    case CLOCK_FONT_CINZEL: return medium ? &lv_font_cinzel_72 : small ? &lv_font_cinzel_48 : &lv_font_cinzel_120;
+    case CLOCK_FONT_BEBASNEUE: return medium ? &lv_font_bebasneue_72 : small ? &lv_font_bebasneue_48 : &lv_font_bebasneue_120;
+    case CLOCK_FONT_DIGITALNUMBERS: return medium ? &lv_font_digitalnumbers_72 : small ? &lv_font_digitalnumbers_48 : &lv_font_digitalnumbers_120;
+    case CLOCK_FONT_RAJDHANI: return medium ? &lv_font_rajdhani_72 : small ? &lv_font_rajdhani_48 : &lv_font_rajdhani_120;
+    case CLOCK_FONT_ROBOTOMONO: return medium ? &lv_font_robotomono_72 : small ? &lv_font_robotomono_48 : &lv_font_robotomono_120;
+    case CLOCK_FONT_NEONLINES: return medium ? &lv_font_neonlines_72 : small ? &lv_font_neonlines_48 : &lv_font_neonlines_120;
+    default: return medium ? &lv_font_montserrat_time_72 : small ? &lv_font_montserrat_48 : &lv_font_montserrat_time_120;
   }
 }
 
@@ -115,6 +125,31 @@ void settingsEvent(lv_event_t *event) {
   }
 }
 
+// Shared full-screen-app back button. A filled, borderless circle avoids the
+// clipped rounded-border arc seen on the device, and the safe-area rectangle
+// keeps the whole 56 px touch target away from the panel edge.
+lv_obj_t *createAppBackButton(lv_obj_t *parent, lv_event_cb_t callback,
+                              uint32_t accent = UI_ACCENT_BLUE) {
+  const ClockLayout::Rect r = ClockLayout::appBack(SCREEN_WIDTH, SCREEN_HEIGHT);
+  lv_obj_t *button = lv_btn_create(parent);
+  lv_obj_set_align(button, LV_ALIGN_TOP_LEFT);
+  lv_obj_set_pos(button, r.x, r.y);
+  lv_obj_set_size(button, r.w, r.h);
+  lv_obj_set_style_radius(button, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(button, themeControlSurface(accent), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
+  lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(button, 0, 0);
+  lv_obj_set_style_bg_color(button, themeTint(accent, LV_OPA_40),
+                            LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(button, LV_OBJ_FLAG_GESTURE_BUBBLE);
+  lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
+  createTablerIcon(button, TABLER_ICON_CHEVRON_LEFT, 28, themeIcon());
+  return button;
+}
+
 bool createFeatheredTimeBackground() {
   timePanelPixels = static_cast<uint8_t *>(heap_caps_malloc(
     TIME_PANEL_BUFFER_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
@@ -137,9 +172,11 @@ int16_t measureTimePanelWidth(const char *text) {
   lv_txt_get_size(&textSize, text, currentClockFont(), 0, 0,
                   LV_COORD_MAX, LV_TEXT_FLAG_NONE);
   const bool large = lowPowerMode || mainClockCentered;
-  const int16_t horizontalPadding = large ? 16 : TIME_PANEL_HORIZONTAL_PADDING;
+  // Large (120 px) faces may use nearly the whole 480 px canvas. Keep a small
+  // padding for the burn-in shift, but never clip the widest native face.
+  const int16_t horizontalPadding = large ? 4 : TIME_PANEL_HORIZONTAL_PADDING;
   const int16_t minimumWidth = large ? 240 : TIME_PANEL_MIN_WIDTH;
-  const int16_t maximumWidth = SCREEN_WIDTH - 32;
+  const int16_t maximumWidth = large ? SCREEN_WIDTH : SCREEN_WIDTH - 32;
   return constrain(static_cast<int16_t>(textSize.x) + horizontalPadding * 2,
                    minimumWidth, maximumWidth);
 }
@@ -221,12 +258,75 @@ static constexpr uint32_t CLOCK_COLOR_PRESETS[CLOCK_COLOR_COUNT] = {
 };
 
 void applyClockColor() {
-  if (!timeLabel) return;
+  if (!timeHourLabel) return;
   const lv_color_t color = clockColorIndex == 0
     ? themeText()
     : lv_color_hex(CLOCK_COLOR_PRESETS[
         clockColorIndex < CLOCK_COLOR_COUNT ? clockColorIndex : 0]);
-  lv_obj_set_style_text_color(timeLabel, color, 0);
+  lv_obj_set_style_text_color(timeHourLabel, color, 0);
+  lv_obj_set_style_text_color(timeColonLabel, color, 0);
+  lv_obj_set_style_text_color(timeMinuteLabel, color, 0);
+}
+
+void setTimeDigitsOpacity(lv_opa_t opacity) {
+  if (!timeHourLabel) return;
+  lv_obj_set_style_text_opa(timeHourLabel, opacity, 0);
+  lv_obj_set_style_text_opa(timeColonLabel, opacity, 0);
+  lv_obj_set_style_text_opa(timeMinuteLabel, opacity, 0);
+}
+
+void setTimeDigitsVisible(bool visible) {
+  if (!timeLabel) return;
+  lv_obj_t *objects[] = {timeLabel, timeHourLabel, timeColonLabel, timeMinuteLabel};
+  for (lv_obj_t *object : objects) {
+    if (!object) continue;
+    if (visible) lv_obj_clear_flag(object, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(object, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+void setColonVisible(bool visible) {
+  if (timeColonLabel)
+    lv_obj_set_style_text_opa(timeColonLabel, visible ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+}
+
+// Subtle OLED burn-in prevention: move the static digit row by a few pixels
+// once a minute. The shift is clamped to the panel padding so wide 120 px
+// faces never clip, and the centered / standby compositions stay visually put.
+bool serviceBurnInShift() {
+  const uint32_t now = millis();
+  if (lastBurnInShiftAt && now - lastBurnInShiftAt < 60000) return false;
+  lastBurnInShiftAt = now;
+  constexpr int8_t pattern[][2] = {
+    {0, 0}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}
+  };
+  burnInPhase = (burnInPhase + 1) % (sizeof(pattern) / sizeof(pattern[0]));
+  burnInOffsetX = pattern[burnInPhase][0] * 4;
+  burnInOffsetY = pattern[burnInPhase][1] * 4;
+  return true;
+}
+
+void layoutTimeDigits() {
+  if (!timeLabel || !timeHourLabel || !timeColonLabel || !timeMinuteLabel) return;
+  const lv_font_t *font = currentClockFont();
+  lv_point_t hourSize{}, colonSize{}, minuteSize{};
+  lv_txt_get_size(&hourSize, lv_label_get_text(timeHourLabel), font, 0, 0,
+                  LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+  lv_txt_get_size(&colonSize, ":", font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+  lv_txt_get_size(&minuteSize, lv_label_get_text(timeMinuteLabel), font, 0, 0,
+                  LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+  const int16_t rowWidth = hourSize.x + colonSize.x + minuteSize.x;
+  const int16_t rowHeight = font->line_height;
+  lv_obj_set_size(timeLabel, rowWidth, rowHeight);
+  lv_obj_set_pos(timeHourLabel, 0, 0);
+  lv_obj_set_pos(timeColonLabel, hourSize.x, 0);
+  lv_obj_set_pos(timeMinuteLabel, hourSize.x + colonSize.x, 0);
+  lv_obj_update_layout(timePanel);
+  const int16_t maxX = max<int16_t>(0, (lv_obj_get_width(timePanel) - rowWidth) / 2);
+  const int16_t maxY = max<int16_t>(0, (lv_obj_get_height(timePanel) - rowHeight) / 2);
+  const int16_t x = constrain(static_cast<int16_t>(burnInOffsetX), -maxX, maxX);
+  const int16_t y = constrain(static_cast<int16_t>(burnInOffsetY), -maxY, maxY);
+  lv_obj_align(timeLabel, LV_ALIGN_CENTER, x, y);
 }
 
 void setClockColor(uint8_t color, bool persist) {
@@ -238,7 +338,7 @@ void setClockColor(uint8_t color, bool persist) {
 }
 
 void applyClockFont() {
-  if (!timeLabel) return;
+  if (!timeHourLabel) return;
   const lv_font_t *font = currentClockFont();
   if (!clockFontHasTimeGlyphs(font)) {
     Serial.printf("Clock font %u invalid; falling back to Montserrat\n",
@@ -248,14 +348,21 @@ void applyClockFont() {
     preferences.putUChar("clock_font", clockFontIndex);
     font = clockFontForPixels(ClockLayout::clockSizePixels(clockSizeIndex));
   }
-  lv_obj_set_style_text_font(timeLabel, font, 0);
+  lv_obj_set_style_text_font(timeHourLabel, font, 0);
+  lv_obj_set_style_text_font(timeColonLabel, font, 0);
+  lv_obj_set_style_text_font(timeMinuteLabel, font, 0);
   // The complete HH:MM string must fit before the panel is centered. All bundled
   // faces are tested at all three native sizes; no transform zoom is used.
-  lv_obj_set_width(timeLabel, LV_SIZE_CONTENT);
   applyClockColor();
   timePanelWidth = 0;
   resizeTimePanelForText(displayedTimeText[0] ? displayedTimeText : "--:--");
-  lv_obj_center(timeLabel);
+  layoutTimeDigits();
+  if (!lowPowerMode && !mainClockCentered) {
+    // A 120 px face can be wider than the old top-left margin allows; center it
+    // horizontally instead of letting the right edge run off the panel.
+    const int16_t x = max<int16_t>(0, (SCREEN_WIDTH - timePanelWidth) / 2);
+    lv_obj_align(timePanel, LV_ALIGN_TOP_LEFT, x, ClockLayout::scale(24, SCREEN_HEIGHT));
+  }
   Serial.printf("Clock font applied: %s (%s, %u px line)\n",
                 clockFontShortName(clockFontIndex),
                 lowPowerMode ? "standby" : (mainClockCentered ? "centered" : "main"),
@@ -318,14 +425,27 @@ void createClockUi() {
   timePanelWidth = 0;
   resizeTimePanelForText("--:--");
 
-  timeLabel = lv_label_create(timePanel);
-  lv_label_set_text(timeLabel, "--:--");
-  lv_obj_set_width(timeLabel, LV_SIZE_CONTENT);
-  lv_obj_set_style_text_font(timeLabel, currentClockFont(), 0);
-  lv_obj_set_style_text_color(timeLabel, lv_color_white(), 0);
-  lv_obj_set_style_text_opa(timeLabel, LV_OPA_COVER, 0);
-  lv_obj_set_style_text_align(timeLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_center(timeLabel);
+  timeLabel = lv_obj_create(timePanel);
+  lv_obj_remove_style_all(timeLabel);
+  lv_obj_set_size(timeLabel, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(timeLabel, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(timeLabel, 0, 0);
+  lv_obj_set_style_pad_all(timeLabel, 0, 0);
+  lv_obj_clear_flag(timeLabel, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+  timeHourLabel = lv_label_create(timeLabel);
+  timeColonLabel = lv_label_create(timeLabel);
+  timeMinuteLabel = lv_label_create(timeLabel);
+  lv_label_set_text(timeHourLabel, "--");
+  lv_label_set_text(timeColonLabel, ":");
+  lv_label_set_text(timeMinuteLabel, "--");
+  lv_obj_t *digits[] = {timeHourLabel, timeColonLabel, timeMinuteLabel};
+  for (lv_obj_t *digit : digits) {
+    lv_obj_set_style_text_font(digit, currentClockFont(), 0);
+    lv_obj_set_style_text_color(digit, lv_color_white(), 0);
+    lv_obj_set_style_text_opa(digit, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(digit, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+  }
+  lv_obj_move_foreground(timeLabel);
   lv_obj_move_foreground(timePanel);
   refreshMainClockLayout();
 
@@ -383,13 +503,16 @@ void refreshClockTheme() {
   lv_obj_t *screen = lv_scr_act();
   lv_obj_set_style_bg_color(screen, themePageBackground(), 0);
   lv_obj_set_style_bg_grad_dir(screen, LV_GRAD_DIR_NONE, 0);
-  if (timeLabel) {
+  if (timeHourLabel) {
     applyClockColor();
     // A faint glow sells the CRT / neon looks. It is only redrawn once a
     // minute, so the complex-draw shadow cost is negligible.
-    lv_obj_set_style_shadow_color(timeLabel, lv_color_hex(themeGlowColor()), 0);
-    lv_obj_set_style_shadow_width(timeLabel, themeHasGlow() ? 8 : 0, 0);
-    lv_obj_set_style_shadow_opa(timeLabel, themeHasGlow() ? LV_OPA_40 : LV_OPA_TRANSP, 0);
+    lv_obj_t *digits[] = {timeHourLabel, timeColonLabel, timeMinuteLabel};
+    for (lv_obj_t *digit : digits) {
+      lv_obj_set_style_shadow_color(digit, lv_color_hex(themeGlowColor()), 0);
+      lv_obj_set_style_shadow_width(digit, themeHasGlow() ? 8 : 0, 0);
+      lv_obj_set_style_shadow_opa(digit, themeHasGlow() ? LV_OPA_40 : LV_OPA_TRANSP, 0);
+    }
   }
   if (dateLabel) lv_obj_set_style_text_color(dateLabel, themeTextDim(0xDCEBFF), 0);
   if (statusLabel) lv_obj_set_style_text_color(statusLabel, themeTextDim(0x91A4BE), 0);
@@ -490,22 +613,22 @@ bool initDisplayAndLvgl() {
   logClockFontStatus("Audiowide", &lv_font_audiowide_48);
   logClockFontStatus("Cinzel", &lv_font_cinzel_48);
   logClockFontStatus("BebasNeue", &lv_font_bebasneue_48);
-  logClockFontStatus("Montserrat 96", &lv_font_montserrat_time_96);
-  logClockFontStatus("Kameron 96", &lv_font_kameron_96);
-  logClockFontStatus("Silkscreen 96", &lv_font_silkscreen_96);
-  logClockFontStatus("DotGothic16 96", &lv_font_dotgothic16_96);
-  logClockFontStatus("Orbitron 96", &lv_font_orbitron_96);
-  logClockFontStatus("Audiowide 96", &lv_font_audiowide_96);
-  logClockFontStatus("Cinzel 96", &lv_font_cinzel_96);
-  logClockFontStatus("BebasNeue 96", &lv_font_bebasneue_96);
+  logClockFontStatus("Montserrat 120", &lv_font_montserrat_time_120);
+  logClockFontStatus("Kameron 96", &lv_font_kameron_120);
+  logClockFontStatus("Silkscreen 96", &lv_font_silkscreen_120);
+  logClockFontStatus("DotGothic16 96", &lv_font_dotgothic16_120);
+  logClockFontStatus("Orbitron 96", &lv_font_orbitron_120);
+  logClockFontStatus("Audiowide 96", &lv_font_audiowide_120);
+  logClockFontStatus("Cinzel 96", &lv_font_cinzel_120);
+  logClockFontStatus("BebasNeue 96", &lv_font_bebasneue_120);
   logClockFontStatus("digitalnumbers 48", &lv_font_digitalnumbers_48);
-  logClockFontStatus("digitalnumbers 96", &lv_font_digitalnumbers_96);
+  logClockFontStatus("digitalnumbers 96", &lv_font_digitalnumbers_120);
   logClockFontStatus("rajdhani 48", &lv_font_rajdhani_48);
-  logClockFontStatus("rajdhani 96", &lv_font_rajdhani_96);
+  logClockFontStatus("rajdhani 96", &lv_font_rajdhani_120);
   logClockFontStatus("robotomono 48", &lv_font_robotomono_48);
-  logClockFontStatus("robotomono 96", &lv_font_robotomono_96);
+  logClockFontStatus("robotomono 96", &lv_font_robotomono_120);
   logClockFontStatus("Neon Lines 48", &lv_font_neonlines_48);
-  logClockFontStatus("Neon Lines 96", &lv_font_neonlines_96);
+  logClockFontStatus("Neon Lines 96", &lv_font_neonlines_120);
   constexpr uint16_t FALLBACK_DRAW_LINES = 40;
   const uint32_t fullScreenPixels =
     static_cast<uint32_t>(SCREEN_WIDTH) * SCREEN_HEIGHT;
@@ -611,15 +734,24 @@ void updateNetworkLabels() {
 
 void setDisplayedTime(const char *text) {
   if (strcmp(displayedTimeText, text) == 0) return;
+  if (!timeHourLabel || !timeColonLabel || !timeMinuteLabel) {
+    strlcpy(displayedTimeText, text, sizeof(displayedTimeText));
+    return;
+  }
 
   strlcpy(displayedTimeText, text, sizeof(displayedTimeText));
-  // lv_label_set_text() invalidates the old and new label bounds itself.
-  // Keep that small invalid area: invalidating the whole time panel makes
-  // LVGL's 90/270-degree software rotation split one clock update into
-  // multiple display writes, which is visible as a tear on the AMOLED.
-  lv_label_set_text(timeLabel, displayedTimeText);
+  char hour[3] = "--";
+  char minute[3] = "--";
+  if (strlen(text) >= 5 && text[2] == ':') {
+    memcpy(hour, text, 2);
+    memcpy(minute, text + 3, 2);
+  }
+  // Update only the two digit labels; the colon keeps its advance width while
+  // its opacity blinks, so the clock never shifts horizontally.
+  if (strcmp(lv_label_get_text(timeHourLabel), hour)) lv_label_set_text(timeHourLabel, hour);
+  if (strcmp(lv_label_get_text(timeMinuteLabel), minute)) lv_label_set_text(timeMinuteLabel, minute);
   resizeTimePanelForText(displayedTimeText);
-  lv_obj_center(timeLabel);
+  layoutTimeDigits();
 }
 
 void updateClock() {
@@ -632,6 +764,7 @@ void updateClock() {
   }
   if (!rtcReady || !rtcTimeValid) {
     setDisplayedTime("--:--");
+    setColonVisible(true);
     return;
   }
 
@@ -642,6 +775,10 @@ void updateClock() {
   snprintf(timeText, sizeof(timeText), "%02d:%02d",
            rtcTime.getHour(), rtcTime.getMinute());
   setDisplayedTime(timeText);
+  // Blink once per second while awake. Standby wakes only once a minute, so it
+  // keeps the colon lit instead of spending extra power on a half-second tick.
+  setColonVisible(lowPowerMode || (rtcTime.getSecond() % 2) == 0);
+  if (serviceBurnInShift()) layoutTimeDigits();
 }
 
 bool allocateBackgroundBuffer() {

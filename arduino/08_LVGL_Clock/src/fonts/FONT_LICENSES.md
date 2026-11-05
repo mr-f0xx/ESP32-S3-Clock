@@ -17,7 +17,7 @@ The generated LVGL bitmap subsets in this directory use these Google Fonts:
 - Neon Lines (a retro clock subset derived from Monoton)
 
 All of these source families are distributed under the SIL Open Font License 1.1.
-Only `0-9`, `:` and `-` were converted at 48 px, 72 px and 96 px for the clock display.
+Only `0-9`, `:` and `-` were converted at 48 px, 72 px and 120 px for the clock display.
 Orbitron and Cinzel are variable fonts upstream; the converted subsets were
 instantiated at weight 700 before running `lv_font_conv`.
 The Inter weather subset contains space, `-`, `0-9`, `:`, and `\u00b0` at a true

@@ -34,6 +34,12 @@ void suspendControlPanelUnderlyingApp() {
     controlPanelMusicWasPlaying = pauseMusicForControlPanel();
   if (controlPanelSuspendedAudiobook)
     controlPanelAudiobookWasPlaying = pauseAudiobookForControlPanel();
+  if (extensionAppVisible()) {
+    // Capture/streaming cannot safely continue behind the overlay; the vault
+    // locks immediately rather than remaining unlocked under another surface.
+    stopExtensionAudio();
+    vaultLock();
+  }
 }
 
 void resumeControlPanelUnderlyingApp() {
@@ -136,6 +142,8 @@ void processControlPanelTransition() {
 uint32_t appMenuClickSuppressedUntil = 0;
 
 void mainUiGestureEvent(lv_event_t *event) {
+  // Extension pages handle their own gestures. The overlay must still close.
+  if (extensionAppVisible() && !controlPanelVisible) return;
   if (lv_event_get_code(event) != LV_EVENT_GESTURE || lowPowerMode) return;
   lv_indev_t *input = lv_indev_get_act();
   if (!input || timerAlertVisible) return;
@@ -491,12 +499,17 @@ void volumeControlEvent(lv_event_t *event) {
 }
 
 void setControlRect(lv_obj_t *object, const ClockLayout::Rect &r) {
+  // LVGL keeps an alignment style after lv_obj_align()/lv_obj_center(). Reset
+  // it before writing absolute coordinates, otherwise a previously centered
+  // icon treats these values as center offsets and lands in the wrong place.
+  lv_obj_set_align(object, LV_ALIGN_TOP_LEFT);
   lv_obj_set_pos(object, r.x, r.y);
   lv_obj_set_size(object, r.w, r.h);
 }
 
 void placeControlIcon(lv_obj_t *icon, const ClockLayout::Rect &r) {
   lv_obj_update_layout(icon);
+  lv_obj_set_align(icon, LV_ALIGN_TOP_LEFT);
   lv_obj_set_pos(icon, r.x + (r.w - lv_obj_get_width(icon)) / 2,
                r.y + (r.h - lv_obj_get_height(icon)) / 2);
 }
@@ -514,6 +527,7 @@ lv_obj_t *createControlButton(const ClockLayout::Rect &r,
   lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
   // Native Alpha-8 artwork; never use the image transform path.
   *icon = createOfficialTablerIcon(button, iconImage);
+  lv_obj_set_align(*icon, LV_ALIGN_TOP_LEFT);
   lv_obj_set_pos(*icon, (r.w - iconImage->header.w) / 2,
                (r.h - iconImage->header.h) / 2);
   return button;
@@ -673,7 +687,7 @@ void createControlPanel() {
   languageControlButton = createControlPillButton(l.settings[4], languageControlEvent, &languageControlLabel);
 
   wifiControlButton = createControlButton(l.wifi, &tabler_wifi, wifiControlEvent, &wifiControlIcon);
-  // These status labels sit beside, not below, the native 56 px icon.
+  // These status labels sit beside, not below, the native 40 px icon.
   lv_obj_set_pos(wifiControlIcon, l.wifiIcon.x - l.wifi.x, l.wifiIcon.y - l.wifi.y);
   wifiControlStatus = createControlLabel(l.wifiStatus, "--", &lv_font_ui_18, true);
   wifiControlIp = createControlLabel(l.wifiIp, "--", &lv_font_ui_16, true);
@@ -808,21 +822,27 @@ void updateControlPanelStatus() {
     changed = true;
   }
 
-  const lv_color_t activeColor = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
+  // Active cards use a translucent accent tint, not a solid accent block:
+  // accent text on an accent fill was invisible on the device.
+  const lv_color_t activeColor = themeTint(UI_ACCENT_BLUE, LV_OPA_30);
+  const lv_color_t activeBorder = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
   const lv_color_t inactiveColor = themeControlSurface(UI_ACCENT_BLUE);
+  const lv_color_t inactiveBorder = themeControlBorder(UI_ACCENT_BLUE);
   const lv_color_t activeTextColor = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
   const lv_color_t inactiveTextColor = themeTextDim(0x9299A3);
   if (displayedWifiEnabled != static_cast<int8_t>(wifiUserEnabled)) {
     displayedWifiEnabled = wifiUserEnabled;
     lv_obj_set_style_bg_color(wifiControlButton,
                               wifiUserEnabled ? activeColor : inactiveColor, LV_PART_MAIN);
+    lv_obj_set_style_border_color(wifiControlButton,
+                                  wifiUserEnabled ? activeBorder : inactiveBorder, LV_PART_MAIN);
     lv_obj_set_style_text_color(wifiControlStatus,
                                 wifiUserEnabled ? activeTextColor : inactiveTextColor, 0);
     lv_obj_set_style_text_color(wifiControlIp,
                                 wifiUserEnabled ? activeTextColor : inactiveTextColor, 0);
     if (wifiControlIcon) {
       lv_obj_set_style_img_recolor(wifiControlIcon,
-        wifiUserEnabled ? themeTextOnAccent() : themeIcon(), 0);
+        wifiUserEnabled ? activeTextColor : themeIcon(), 0);
     }
     changed = true;
   }
@@ -832,10 +852,12 @@ void updateControlPanelStatus() {
     const lv_color_t lockTextColor = orientationLocked
                                        ? activeTextColor : inactiveTextColor;
     lv_obj_set_style_bg_color(bluetoothControlButton, lockColor, LV_PART_MAIN);
+    lv_obj_set_style_border_color(bluetoothControlButton,
+                                  orientationLocked ? activeBorder : inactiveBorder, LV_PART_MAIN);
     lv_obj_set_style_text_color(bluetoothControlStatus, lockTextColor, 0);
     if (bluetoothControlIcon) {
       lv_obj_set_style_img_recolor(bluetoothControlIcon,
-        orientationLocked ? themeTextOnAccent() : themeIcon(), 0);
+        orientationLocked ? activeTextColor : themeIcon(), 0);
     }
     changed = true;
   }

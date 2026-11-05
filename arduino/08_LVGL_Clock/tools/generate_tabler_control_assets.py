@@ -11,18 +11,18 @@ TABLER_VERSION = "3.45.0"
 
 
 ICONS = {
-    "wifi": 56,
-    "bluetooth": 56,
-    "lock": 56,
-    "volume": 48,
-    "sun": 48,
-    "battery": 56,
-    "battery-1": 56,
-    "battery-2": 56,
-    "battery-3": 56,
-    "battery-4": 56,
-    "battery-charging": 56,
-    "battery-off": 56,
+    "wifi": 40,
+    "bluetooth": 40,
+    "lock": 40,
+    "volume": 32,
+    "sun": 32,
+    "battery": 40,
+    "battery-1": 40,
+    "battery-2": 40,
+    "battery-3": 40,
+    "battery-4": 40,
+    "battery-charging": 40,
+    "battery-off": 40,
     # Clock-mode selector artwork. Keep these at their final LVGL size because
     # Alpha-8 sources must not be zoomed at runtime.
     "photo": 120,
@@ -40,7 +40,14 @@ ICONS = {
     # The launcher power glyph used a coarse 12-point polyline and looked
     # faceted at 120 px. Use the official smooth outline like the other keys.
     "power": 120,
+    "headphones": 120,
     "cloud": 120,
+    "server-2": 120,
+    "microphone": 120,
+    "device-gamepad-2": 120,
+    "radar-2": 120,
+    "piano": 120,
+    "lock-password": 120,
     "x": 32,
 }
 

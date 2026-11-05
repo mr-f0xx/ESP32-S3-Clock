@@ -13,7 +13,7 @@ header = Path("arduino/08_LVGL_Clock/tabler_control_icons.h").read_text()
 assert not re.search(r"^\s*lv_img_set_zoom\s*\(", menu, re.M), "launcher must not zoom Alpha-8 icons"
 assert "constexpr lv_coord_t APP_MENU_ICON_SIZE = 120;" in menu
 
-image_icons = ["clock", "device_tv", "adjustments", "cloud", "calendar", "alarm", "music", "power"]
+image_icons = ["clock", "device_tv", "adjustments", "cloud", "calendar", "alarm", "music", "headphones", "power", "server_2", "microphone", "device_gamepad_2", "radar_2", "piano", "lock_password"]
 for name in image_icons:
     pattern = rf"static const lv_img_dsc_t tabler_{name} = \{{.*?\.w = (\d+),\s*\.h = (\d+)"
     match = re.search(pattern, header, re.S)
@@ -21,10 +21,10 @@ for name in image_icons:
     assert match.groups() == ("120", "120"), f"tabler_{name} must be native 120x120"
     assert f"createTablerAppIcon(" in menu and f"&tabler_{name}" in menu
 
-# All 16 tiles still use the shared larger canvas: eight images plus eight vectors.
-assert menu.count("createTablerAppIcon(") == 9  # definition + eight call sites
+# All 22 tiles use the shared larger canvas: fifteen images plus seven vectors.
+assert menu.count("createTablerAppIcon(") == 11  # definition + nine direct sites + extension loop
 vector_calls = re.findall(r"createTablerIcon\([^;]*?APP_MENU_ICON_SIZE", menu, re.S)
-assert len(vector_calls) == 6, f"expected six vector call sites covering eight icons, got {len(vector_calls)}"
+assert len(vector_calls) == 5, f"expected five vector call sites covering seven icons, got {len(vector_calls)}"
 assert "createTablerAppIcon(powerButton, &tabler_power);" in menu
 assert "TABLER_ICON_POWER" not in menu, "power must use the smooth native asset, not the faceted polyline"
 assert "TABLER_ICON_CALCULATOR" in menu and "TABLER_ICON_NOTES" in menu and "TABLER_ICON_STOPWATCH" in menu

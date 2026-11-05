@@ -222,6 +222,7 @@ void applyUiAppearance() {
   refreshPhotoFrameTheme();
   refreshTimerTheme();
   refreshUtilityTheme();
+  refreshExtensionThemes();
   // Dynamic content in the new language / colors.
   updateNetworkLabels();
   updateControlPanelStatus();

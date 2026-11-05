@@ -173,7 +173,8 @@ void openUtilityApp(uint8_t app) {
   lv_obj_set_style_bg_opa(utilityPage, LV_OPA_COVER, 0);
   lv_obj_clear_flag(utilityPage, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_flag(utilityPage, LV_OBJ_FLAG_CLICKABLE);
-  utilityButton(utilityPage, "<", 15, 14, 54, 48, utilityBackEvent, 0, 1);
+  createAppBackButton(utilityPage, utilityBackEvent,
+                      app == 0 ? UI_ACCENT_BLUE : app == 1 ? UI_ACCENT_MINT : UI_ACCENT_ROSE);
   lv_obj_t *title = lv_label_create(utilityPage);
   lv_label_set_text(title, tr(app == 0 ? STR_CALCULATOR : app == 1 ? STR_NOTES : STR_STOPWATCH));
   lv_obj_set_style_text_font(title, &lv_font_ui_24, 0);
