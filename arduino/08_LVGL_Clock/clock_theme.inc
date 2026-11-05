@@ -11,6 +11,7 @@ enum UiTheme : uint8_t {
   UI_THEME_AURORA,
   UI_THEME_OCEAN,
   UI_THEME_SPECTRUM,
+  UI_THEME_GLOW,
   UI_THEME_COUNT
 };
 
@@ -55,6 +56,10 @@ static constexpr ThemePalette THEME_PALETTES[UI_THEME_COUNT] = {
   // Spectrum: neutral surfaces with individually coloured launcher glows.
   {0x050510, 0x10101B, 0x40405A, 0xF4F4FF, 0xA0A0B8,
    0xFFFFFF, 0x000000, false},
+  // Icon Glow: HiBy-style dark graphite tiles on true black, each icon keeps
+  // its own vivid neon hue and gets a soft halo. Per-app accents elsewhere.
+  {0x000000, 0x262A33, 0x3A404C, 0xFFFFFF, 0x9AA3B2,
+   0xFFFFFF, 0x000000, false},
 };
 
 inline const ThemePalette &themePalette() {
@@ -63,6 +68,9 @@ inline const ThemePalette &themePalette() {
 
 inline bool themeIsAmber() { return uiTheme == UI_THEME_AMBER; }
 inline bool themeIsSpectrum() { return uiTheme == UI_THEME_SPECTRUM; }
+inline bool themeIsGlow() { return uiTheme == UI_THEME_GLOW; }
+// Launcher palettes that give every tile its own vivid icon hue.
+inline bool themePerTileColors() { return themeIsSpectrum() || themeIsGlow(); }
 inline bool themeIsBlack() { return uiTheme == UI_THEME_BLACK; }
 inline bool themeIsRetro() { return uiTheme == UI_THEME_RETRO; }
 inline bool themeIsCyberpunk() { return uiTheme == UI_THEME_CYBERPUNK; }
@@ -133,6 +141,7 @@ inline const char *themeShortName() {
     case UI_THEME_AURORA: return "AUR";
     case UI_THEME_OCEAN: return "OCN";
     case UI_THEME_SPECTRUM: return "SPC";
+    case UI_THEME_GLOW: return "GLW";
     default: return "STD";
   }
 }
@@ -151,6 +160,7 @@ void refreshWeatherTheme();
 void refreshWorldClockTheme();
 void refreshPhotoFrameTheme();
 void refreshTimerTheme();
+void refreshUtilityTheme();
 
 // Queue a full language/theme re-apply. The main loop performs it inside a
 // screen fade so the recolor is never visible as a partial repaint.
@@ -193,6 +203,7 @@ void applyUiAppearance() {
   refreshWorldClockTheme();
   refreshPhotoFrameTheme();
   refreshTimerTheme();
+  refreshUtilityTheme();
   // Dynamic content in the new language / colors.
   updateNetworkLabels();
   updateControlPanelStatus();
