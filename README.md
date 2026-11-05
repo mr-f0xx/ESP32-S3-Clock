@@ -91,7 +91,7 @@ Six additional launcher pages provide Subsonic/Gonic streaming, stereo voice mem
 
 ### Offline utilities
 
-The last launcher page contains a calculator, notes, and a stopwatch. The calculator evaluates operations left to right; **C** clears errors such as division by zero. Notes hold one note of up to 512 characters: tap **Save**, or use the back button to save before leaving. The note is stored unencrypted in device settings and survives restart; a full firmware erase can remove it. The stopwatch keeps running when you leave the app and can be paused or reset; its state is lost on restart.
+The last launcher page contains a calculator, notes, and a stopwatch. The calculator evaluates operations left to right; **C** clears errors such as division by zero. **Notes opens as a reader**: it lists the text files in `/notes` on the TF card and does not show the keyboard until you tap **New** or **Edit**. Notes are plain UTF-8 `.txt` files up to 4 KB each (24 listed); **Save** writes through a temporary file and keeps the previous revision as `.bak`. The old single device-settings note is migrated to `/notes/legacy-note.txt` when the card is available; without a card, Notes can still save one local fallback note. **Refresh** remounts the card after reinsertion. The stopwatch keeps running when you leave the app and can be paused or reset; its state is lost on restart.
 
 ## 3. 准备 TF 卡
 
@@ -100,9 +100,16 @@ The last launcher page contains a calculator, notes, and a stopwatch. The calcul
 ```text
 /wallpaper/                 动态天气壁纸
 /music/                     MP3/WAV 音乐
+/audiobooks/                MP3/WAV 有声书
+/photos/                    JPG 照片（也可放在根目录）
+/notes/                     Notes 应用的 UTF-8 .txt 笔记
 /video/                     MJPEG 视频及同名 WAV 音频
 /video/rotated/             竖屏预旋转视频
 ```
+
+TF 卡使用 FAT32。固件在 SPI3（MOSI 1 / SCLK 2 / MISO 3 / CS 41）上依次以 20、4、1 MHz 重试挂载，并在串口输出卡类型/容量；如果仍提示 SD 不可用，请重新插拔卡后在 Notes 中点 **Refresh**，或检查串口日志。
+
+The card must be FAT32. Firmware retries the SPI3 mount at 20/4/1 MHz and logs card type/size; if it still reports SD unavailable, reinsert the card and tap **Refresh** in Notes, or check the serial log.
 
 转换完成的 JWP 已按天气类型和屏幕方向保存在 [`tfcard/wallpaper`](tfcard/wallpaper)，并由 Git LFS 管理。需要完整下载源码和壁纸时先安装 Git LFS，再执行：
 

@@ -590,7 +590,10 @@ lv_obj_t *createControlPillButton(const ClockLayout::Rect &r, lv_event_cb_t call
   lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *label = lv_label_create(button);
   lv_obj_set_width(label, r.w - 8);
-  lv_obj_set_height(label, r.h - 8);
+  // A fixed r.h-8 label box paints its glyphs at the top of that box, which is
+  // what made the five pills look high in their tiles. Use one font line and
+  // center the line box vertically in the button.
+  lv_obj_set_height(label, lv_font_get_line_height(&lv_font_ui_16));
   lv_obj_set_style_text_font(label, &lv_font_ui_16, 0);
   lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
@@ -647,9 +650,16 @@ lv_obj_t *createControlSlider(const ClockLayout::Rect &r, int32_t value,
 
 lv_obj_t *createControlLabel(const ClockLayout::Rect &r, const char *text,
                              const lv_font_t *font, bool centered = false,
-                             lv_label_long_mode_t longMode = LV_LABEL_LONG_WRAP) {
+                             lv_label_long_mode_t longMode = LV_LABEL_LONG_DOT) {
   lv_obj_t *label = lv_label_create(controlPanel);
-  setControlRect(label, r);
+  // Center the font's line box inside the layout row. This keeps the battery
+  // percentage on the icon centerline and AUTO/LOCKED beside the lock icon,
+  // instead of painting the first line at the top of a taller fixed label.
+  const ClockLayout::Rect line = ClockLayout::centeredLineRect(
+    r, static_cast<int16_t>(lv_font_get_line_height(font)));
+  lv_obj_set_align(label, LV_ALIGN_TOP_LEFT);
+  lv_obj_set_pos(label, line.x, line.y);
+  lv_obj_set_size(label, line.w, line.h);
   lv_label_set_text(label, text);
   // DOT keeps both the width and height fixed; WRAP can grow past a short row.
   lv_label_set_long_mode(label, longMode);

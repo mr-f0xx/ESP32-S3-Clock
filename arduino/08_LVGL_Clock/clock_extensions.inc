@@ -201,6 +201,7 @@ void processExtensionTransitions() {
       if (utilityActive == 1) saveUtilityNote();
       lv_obj_del(utilityPage);
       utilityPage = utilityDisplay = utilityNote = utilityStatus = nullptr;
+      utilityNotePanel = utilityNoteKeyboard = nullptr;
       utilityActive = 255;
     }
     stopExtensionAudio();

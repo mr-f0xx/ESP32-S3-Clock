@@ -71,6 +71,21 @@ standby. They use the existing theme palette and the shared 56 px back button.
   QSPI panel. **Sound is disabled** in this first frontend; compatibility and frame
   rate depend on the cartridge and hardware.
 
+## Notes (reader-first)
+
+- Opening **Notes** lists `/notes/*.txt` from the shared TF mount; the keyboard is
+  not created until **New** or **Edit** is tapped. Tap a note to read it, **Edit**
+  to change it, **Save** to write it back to TF. The shared back button returns
+  from editor to reader, from reader to list, then to the launcher.
+- Plain UTF-8 text, 4 KB per note, up to 24 listed files. Saves use a verified
+  `.tmp` file and keep the previous revision as `.bak`; a failed rename restores
+  the backup. Notes are unencrypted—do not store secrets there.
+- The former single NVS note is migrated to `/notes/legacy-note.txt` once the card
+  is available. Without a card, one local fallback note can still be saved in NVS;
+  an SD-backed note never silently falls back to a different local file.
+- **Refresh** forces a remount, useful after reinserting the card. The same mount
+  path is shared with music/audiobooks/photos and retries 20/4/1 MHz on SPI3.
+
 ## WiFi / RF HUD
 
 - Normal Wi-Fi scan lists nearby SSIDs, RSSI and channels. The monitor shows aggregate
@@ -119,6 +134,9 @@ bash tests/run_extension_apps_test.sh
 bash tests/run_vault_crypto_test.sh   # fetches pinned mbedtls 3.6.4 if MBEDTLS_DIR is unset
 bash tests/run_launcher_icons_test.sh
 bash tests/run_ui_regressions_test.sh
+bash tests/run_sd_notes_test.sh
+bash tests/run_themes_test.sh
+bash tests/run_lvgl_ui_test.sh
 bash tests/run_clock_layout_test.sh
 bash tests/run_clock_fonts_test.sh
 ```

@@ -3,6 +3,12 @@
 
 constexpr uint8_t MUSIC_TRACK_LIMIT = 64;
 constexpr uint32_t MUSIC_SD_FREQUENCY = 20000000;
+// Some FAT32 cards enumerate at the 400 kHz init clock but fail the first
+// 20 MHz data phase on this board's short, unbuffered TF traces. Retry the
+// mount at progressively safer data clocks before declaring the card absent.
+constexpr uint32_t MUSIC_SD_MOUNT_FREQUENCIES[] = {
+  MUSIC_SD_FREQUENCY, 4000000, 1000000
+};
 constexpr uint32_t MUSIC_DEFAULT_SAMPLE_RATE = 44100;
 // Reserve I2S before the video DMA arena fragments internal SRAM. Keep the
 // v1.1.0 queue (10 x 1024 B = 2560 stereo frames, ~58 ms at 44.1 kHz): growing
@@ -26,6 +32,7 @@ String musicSuspendedTrackPath;
 uint8_t musicTrackCount = 0;
 uint8_t musicTrackIndex = 0;
 bool musicSdReady = false;
+uint32_t musicSdMountedFrequency = 0;
 bool musicCodecReady = false;
 bool musicPaused = false;
 es8311_handle_t musicCodec = nullptr;
@@ -382,18 +389,62 @@ void rebuildMusicPlaylist() {
   refreshMusicPlaylistStyles();
 }
 
+void unmountMusicSd() {
+  SD.end();
+  musicSdSpi.end();
+  pinMode(SD_CS_PIN, OUTPUT);
+  digitalWrite(SD_CS_PIN, HIGH);
+  musicSdReady = false;
+  musicSdMountedFrequency = 0;
+}
+
 bool mountMusicSd() {
   if (musicSdReady) return true;
-  musicSdSpi.begin(SD_SCLK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
-  if (!SD.begin(SD_CS_PIN, musicSdSpi, MUSIC_SD_FREQUENCY)) {
+  for (uint32_t frequency : MUSIC_SD_MOUNT_FREQUENCIES) {
+    // Start each attempt from a deselected card and a stopped SPI3 bus. The
+    // Arduino SD core performs the 400 kHz power-up sequence itself once the
+    // bus pins are attached; do not move SD to FSPI/SPI2 (the QSPI LCD host).
+    SD.end();
     musicSdSpi.end();
-    Serial.println("Music: SD mount failed");
-    setMusicStatus(STR_SD_UNAVAILABLE);
-    return false;
+    pinMode(SD_CS_PIN, OUTPUT);
+    digitalWrite(SD_CS_PIN, HIGH);
+    delay(2);
+    if (!musicSdSpi.begin(SD_SCLK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN)) {
+      Serial.printf("SD: SPI3 bus start failed at %lu Hz\n",
+                    static_cast<unsigned long>(frequency));
+      continue;
+    }
+    if (SD.begin(SD_CS_PIN, musicSdSpi, frequency, "/sd", 10, false)) {
+      File root = SD.open("/");
+      const bool rootOk = root && root.isDirectory();
+      if (root) root.close();
+      if (rootOk) {
+        musicSdReady = true;
+        musicSdMountedFrequency = frequency;
+        Serial.printf("SD: mounted type=%u size=%llu MiB at %lu Hz\n",
+                      static_cast<unsigned>(SD.cardType()),
+                      static_cast<unsigned long long>(SD.cardSize() / 1048576ULL),
+                      static_cast<unsigned long>(frequency));
+        return true;
+      }
+      Serial.println("SD: FAT mounted but root directory is unreadable");
+    } else {
+      Serial.printf("SD: mount failed at %lu Hz\n",
+                    static_cast<unsigned long>(frequency));
+    }
+    SD.end();
+    musicSdSpi.end();
+    delay(20);
   }
-  musicSdReady = true;
-  Serial.println("Music: SD mounted");
-  return true;
+  pinMode(SD_CS_PIN, OUTPUT);
+  digitalWrite(SD_CS_PIN, HIGH);
+  Serial.println("SD: no usable FAT card after 20/4/1 MHz retries");
+  return false;
+}
+
+bool remountMusicSd() {
+  unmountMusicSd();
+  return mountMusicSd();
 }
 
 void scanMusicTracks() {
@@ -406,7 +457,10 @@ void scanMusicTracks() {
     Serial.println("Music: waiting for weather SD worker to stop");
     return;
   }
-  if (!mountMusicSd()) return;
+  if (!mountMusicSd()) {
+    setMusicStatus(STR_SD_UNAVAILABLE);
+    return;
+  }
 
   const char *scanPath = SD.exists("/music") ? "/music" : "/";
   File directory = SD.open(scanPath);
@@ -773,8 +827,15 @@ void printVideoAudioDiagnostics(uint32_t videoPositionMs,
 }
 
 bool startMusicTrack(uint8_t index) {
-  if (!musicTrackCount || index >= musicTrackCount ||
-      !weatherWallpaperSdReadyForOtherUsers() || !mountMusicSd()) return false;
+  if (!musicTrackCount || index >= musicTrackCount) return false;
+  if (!weatherWallpaperSdReadyForOtherUsers()) {
+    setMusicStatus(STR_SD_BUSY);
+    return false;
+  }
+  if (!mountMusicSd()) {
+    setMusicStatus(STR_SD_UNAVAILABLE);
+    return false;
+  }
   stopAudiobookPlayback();
   stopMusicPlayback();
   stopRadioPlayback();
@@ -1105,9 +1166,7 @@ void suspendMusicForLowPower(bool sdSafeToUnmount) {
   musicCodecReady = false;
   audioCodecReachable = false;
   if (musicSdReady && sdSafeToUnmount) {
-    SD.end();
-    musicSdSpi.end();
-    musicSdReady = false;
+    unmountMusicSd();
   } else if (musicSdReady) {
     // Never tear down the FAT/SPI objects while the wallpaper reader could
     // still be returning from a card transaction. Retaining the mounted card

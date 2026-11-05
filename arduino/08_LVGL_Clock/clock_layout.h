@@ -25,6 +25,14 @@ constexpr Rect rect(int16_t x, int16_t y, int16_t w, int16_t h,
   return {scale(x, width), scale(y, height), scale(w, width), scale(h, height)};
 }
 
+// LVGL labels paint their first line at the top of the object box. Giving a
+// single-line label the full tile height therefore looks visually high in the
+// tile. Shrink the box to the font line height and center that box in the row.
+inline Rect centeredLineRect(const Rect &row, int16_t lineHeight) {
+  const int16_t h = lineHeight > 0 && lineHeight < row.h ? lineHeight : row.h;
+  return {row.x, static_cast<int16_t>(row.y + (row.h - h) / 2), row.w, h};
+}
+
 // Shared safe-area back button. Every full-screen app uses this rectangle so
 // the glyph can never sit under a rounded corner or outside the parent clip.
 inline Rect appBack(int16_t width, int16_t height) {

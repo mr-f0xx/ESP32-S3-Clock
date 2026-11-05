@@ -558,6 +558,12 @@ void suspendPhotoFrameForLowPower();
 void selectAdjacentPhoto(int8_t direction);
 void openUtilityApp(uint8_t app);
 void serviceUtilityApps();
+// Shared SD owner lives in clock_music.inc, which is included after the
+// utilities. Notes uses the same SPI3/FAT mount path as music and audiobooks.
+bool mountMusicSd();
+bool remountMusicSd();
+void unmountMusicSd();
+void stopMusicPlayback();
 void createTimerPage(lv_obj_t *screen);
 void showTimerPage(bool fade = true);
 void hideTimerPage(bool fade = true, bool returnToMenu = true);
