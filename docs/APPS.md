@@ -65,9 +65,11 @@ standby. They use the existing theme palette and the shared 56 px back button.
 - Put legally owned/homebrew `.gb` files in `/roms/` (up to 8 MiB each). Battery-backed
   saves are written to the matching `.sav`, with a `.bak` previous-save copy and periodic
   autosave while playing.
-- Touch D-pad, A/B, Start/Select, Pause, Save and ROM picker. The LCD is doubled to
-  320×288 and targets 30 fps on the QSPI panel. **Sound is disabled** in this first
-  frontend; compatibility and frame rate depend on the cartridge and hardware.
+- Touch D-pad, A/B, Start/Select, Pause, Save and ROM picker. The shared **top-left
+  back button stays above the ROM picker**, so you can return to the launcher even
+  when `/roms` is empty. The LCD is doubled to 320×288 and targets 30 fps on the
+  QSPI panel. **Sound is disabled** in this first frontend; compatibility and frame
+  rate depend on the cartridge and hardware.
 
 ## WiFi / RF HUD
 

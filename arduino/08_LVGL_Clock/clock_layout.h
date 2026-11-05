@@ -32,9 +32,9 @@ inline Rect appBack(int16_t width, int16_t height) {
 }
 
 // Version 2 removes the old AMOLED Black entry and moves Icon Glow to ID 0.
-// The other six themes kept their historical IDs, so only the retired default
-// and the old Glow ID need remapping.
-constexpr uint8_t THEME_COUNT = 7;
+// Later palettes are append-only (Matrix 7, Tokyo Night 8, Dracula 9), so no
+// additional preference migration is needed for saved schema-2 selections.
+constexpr uint8_t THEME_COUNT = 10;
 constexpr uint8_t THEME_GLOW = 0;
 constexpr uint8_t migrateTheme(uint8_t stored, bool version2) {
   if (version2) return stored < THEME_COUNT ? stored : THEME_GLOW;
@@ -71,8 +71,10 @@ inline Control control(int16_t width, int16_t height) {
   l.wifi = r(24, 184, 208, 88);
   l.rotation = r(248, 184, 208, 88);
   l.wifiIcon = r(40, 208, 40, 40);
-  l.wifiStatus = r(92, 200, 124, 24);
-  l.wifiIp = r(92, 228, 124, 20);
+  // Two fixed single-line rows beside the icon. Long SSIDs ellipsize instead
+  // of wrapping down into the IP row (the overlap seen on the device).
+  l.wifiStatus = r(92, 198, 128, 26);
+  l.wifiIp = r(92, 232, 128, 22);
   l.rotationIcon = r(264, 208, 40, 40);
   l.rotationStatus = r(316, 208, 124, 40);
   l.brightnessIcon = r(24, 308, 32, 32);
@@ -85,6 +87,23 @@ inline Control control(int16_t width, int16_t height) {
   l.volumeValue = r(388, 392, 68, 36);
   l.hint = r(24, 448, 432, 24);
   l.knobOverhang = scale(10, width);
+  return l;
+}
+
+struct Gameboy {
+  Rect back, title, subtitle, roms[8], refresh, canvas;
+};
+inline Gameboy gameboy(int16_t width, int16_t height) {
+  Gameboy l{};
+  auto r = [&](int16_t x, int16_t y, int16_t w, int16_t h) {
+    return rect(x, y, w, h, width, height);
+  };
+  l.back = appBack(width, height);
+  l.title = r(96, 34, 360, 40);
+  l.subtitle = r(24, 86, 432, 32);
+  for (uint8_t i = 0; i < 8; ++i) l.roms[i] = r(24, 124 + i * 38, 432, 34);
+  l.refresh = r(24, 438, 432, 36);
+  l.canvas = r(80, 84, 320, 288);
   return l;
 }
 

@@ -11,6 +11,10 @@ enum UiTheme : uint8_t {
   UI_THEME_AURORA,
   UI_THEME_OCEAN,
   UI_THEME_SPECTRUM,
+  // Additive IDs: keep every previously saved theme value stable.
+  UI_THEME_MATRIX,
+  UI_THEME_TOKYO_NIGHT,
+  UI_THEME_DRACULA,
   UI_THEME_COUNT
 };
 
@@ -19,6 +23,19 @@ constexpr uint32_t CRT_AMBER = 0xFFB000;        // bright trace / primary text
 constexpr uint32_t CRT_AMBER_DIM = 0xB37700;    // secondary text
 constexpr uint32_t CRT_AMBER_FAINT = 0x6B4A00;  // borders / dividers
 constexpr uint32_t CRT_AMBER_GLOW = 0xFF9000;   // soft glow shadow
+
+// Matrix: crisp phosphor-green terminal, not an animated CRT effect.
+constexpr uint32_t MATRIX_GREEN = 0x00FF41;
+constexpr uint32_t MATRIX_GREEN_DIM = 0x00B32C;
+constexpr uint32_t MATRIX_BORDER = 0x008F11;
+constexpr uint32_t MATRIX_SURFACE = 0x031006;
+// Tokyo Night (night variant) and Dracula use their familiar editor palettes.
+constexpr uint32_t TOKYO_BG = 0x1A1B26, TOKYO_SURFACE = 0x24283B;
+constexpr uint32_t TOKYO_BORDER = 0x414868, TOKYO_TEXT = 0xC0CAF5;
+constexpr uint32_t TOKYO_DIM = 0xA9B1D6, TOKYO_BLUE = 0x7AA2F7;
+constexpr uint32_t DRACULA_BG = 0x282A36, DRACULA_SURFACE = 0x44475A;
+constexpr uint32_t DRACULA_BORDER = 0x6272A4, DRACULA_TEXT = 0xF8F8F2;
+constexpr uint32_t DRACULA_DIM = 0xC3CBE4, DRACULA_PURPLE = 0xBD93F9;
 
 struct ThemePalette {
   uint32_t background;
@@ -54,7 +71,18 @@ static constexpr ThemePalette THEME_PALETTES[UI_THEME_COUNT] = {
   // Spectrum: neutral surfaces with individually coloured launcher glows.
   {0x050510, 0x10101B, 0x40405A, 0xF4F4FF, 0xA0A0B8,
    0xFFFFFF, 0x000000, false},
+  // Matrix Terminal: true-black page, dark green panels, crisp green rules.
+  {0x000000, MATRIX_SURFACE, MATRIX_BORDER, MATRIX_GREEN, MATRIX_GREEN_DIM,
+   MATRIX_GREEN, 0x000000, true},
+  // Tokyo Night: flat night-blue editor surfaces, blue accent, no halo.
+  {TOKYO_BG, TOKYO_SURFACE, TOKYO_BORDER, TOKYO_TEXT, TOKYO_DIM,
+   TOKYO_BLUE, 0x000000, true},
+  // Dracula: purple accent on the classic background/current-line surfaces.
+  {DRACULA_BG, DRACULA_SURFACE, DRACULA_BORDER, DRACULA_TEXT, DRACULA_DIM,
+   DRACULA_PURPLE, 0x000000, true},
 };
+static_assert(sizeof(THEME_PALETTES) / sizeof(THEME_PALETTES[0]) == UI_THEME_COUNT,
+              "Every theme ID needs a palette");
 
 inline const ThemePalette &themePalette() {
   return THEME_PALETTES[uiTheme < UI_THEME_COUNT ? uiTheme : UI_THEME_GLOW];
@@ -67,11 +95,23 @@ inline bool themeIsGlow() { return uiTheme == UI_THEME_GLOW; }
 inline bool themePerTileColors() { return themeIsSpectrum() || themeIsGlow(); }
 inline bool themeIsRetro() { return uiTheme == UI_THEME_RETRO; }
 inline bool themeIsCyberpunk() { return uiTheme == UI_THEME_CYBERPUNK; }
-// True for the single-neon-accent palettes (retro / cyberpunk / aurora / ocean)
-// where every tile and control collapses onto one accent hue.
+inline bool themeIsMatrix() { return uiTheme == UI_THEME_MATRIX; }
+inline bool themeIsTokyoNight() { return uiTheme == UI_THEME_TOKYO_NIGHT; }
+inline bool themeIsDracula() { return uiTheme == UI_THEME_DRACULA; }
+// Editor themes are deliberately flat: readable text, subtle rules, no halo.
+inline bool themeIsEditor() { return themeIsTokyoNight() || themeIsDracula(); }
+inline bool themeIsFlatDark() { return themeIsMatrix() || themeIsEditor(); }
+// True for the older single-neon-accent palettes with a visible trace/glow.
 inline bool themeIsNeon() {
-  return !themeIsGlow() && !themeIsAmber() && themePalette().monochromeAccent;
+  return !themeIsGlow() && !themeIsAmber() && !themeIsFlatDark() &&
+         themePalette().monochromeAccent;
 }
+// Terminal keys are nearly square; editor themes keep a softer code-tool radius.
+inline lv_coord_t themeControlRadius(lv_coord_t normal) {
+  return themeIsMatrix() ? 2 : themeIsEditor() ? 12 : normal;
+}
+// A small shell prompt on Matrix labels; other themes keep their plain text.
+inline const char *themeLabelPrefix() { return themeIsMatrix() ? "> " : ""; }
 
 // Accent family shared by tiles and every app. Amber collapses to phosphor;
 // Glow brightens the per-app accents to match the launcher neon palette.
@@ -133,8 +173,11 @@ inline lv_color_t themeTint(uint32_t accent, lv_opa_t opacity) {
   return lv_color_mix(lv_color_hex(themeAccent(accent)), themePageBackground(), opacity);
 }
 inline lv_color_t themeControlSurface(uint32_t accent) {
-  return themePerTileColors() ? themeTint(accent, LV_OPA_20)
-                             : lv_color_hex(themeSurface(0x080B10));
+  if (themePerTileColors()) return themeTint(accent, LV_OPA_20);
+  // Dracula's current-line color is great for panels, but purple accent text
+  // needs the darker page background to stay readable on small control labels.
+  if (themeIsDracula()) return lv_color_hex(DRACULA_BG);
+  return lv_color_hex(themeSurface(0x080B10));
 }
 inline lv_color_t themeControlBorder(uint32_t accent) {
   return themePerTileColors() ? themeTint(accent, LV_OPA_50)
@@ -159,6 +202,9 @@ inline const char *themeShortName() {
     case UI_THEME_AURORA: return "AUR";
     case UI_THEME_OCEAN: return "OCN";
     case UI_THEME_SPECTRUM: return "SPC";
+    case UI_THEME_MATRIX: return "MTX";
+    case UI_THEME_TOKYO_NIGHT: return "TKY";
+    case UI_THEME_DRACULA: return "DRC";
     default: return "GLW";
   }
 }

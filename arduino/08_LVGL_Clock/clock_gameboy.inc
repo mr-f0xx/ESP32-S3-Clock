@@ -82,11 +82,17 @@ void gbScanRoms() {
 void gbBuildList() {
   if (!gbList) return;
   lv_obj_clean(gbList);
-  extLabel(gbList, "Game Boy - choose a .gb ROM", 24, 20, 432, 24, true);
-  extLabel(gbList, "DMG only - /roms on TF - no games included - silent mode", 24, 58, 432, 16);
+  const ClockLayout::Gameboy layout = ClockLayout::gameboy(SCREEN_WIDTH, SCREEN_HEIGHT);
+  // Keep the shared top-left back key clear even when the ROM picker covers
+  // the whole page. The picker title starts to the right of that 56 px key.
+  extLabel(gbList, themeIsMatrix() ? "> Choose a .gb ROM" : "Choose a .gb ROM",
+           layout.title.x, layout.title.y, layout.title.w, 24, true);
+  extLabel(gbList, "DMG only - /roms on TF - no games included - silent mode",
+           layout.subtitle.x, layout.subtitle.y, layout.subtitle.w, 16);
   gbScanRoms();
   for (uint8_t i = 0; i < min<uint8_t>(gbRomCount, 8); ++i) {
-    lv_obj_t *button = extButton(gbList, gbRomPaths[i].substring(6).c_str(), 24, 100 + i * 42, 432, 36,
+    lv_obj_t *button = extButton(gbList, gbRomPaths[i].substring(6).c_str(), layout.roms[i].x, layout.roms[i].y,
+                layout.roms[i].w, layout.roms[i].h,
       [](lv_event_t *event) {
         if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
         const uint8_t index = reinterpret_cast<uintptr_t>(lv_event_get_user_data(event));
@@ -95,8 +101,9 @@ void gbBuildList() {
     lv_obj_set_width(lv_obj_get_child(button, 0), 404);
     lv_label_set_long_mode(lv_obj_get_child(button, 0), LV_LABEL_LONG_DOT);
   }
-  if (!gbRomCount) extLabel(gbList, "Copy legally owned / homebrew .gb files into /roms, then reopen this app.", 24, 130, 432, 20);
-  extButton(gbList, "Refresh", 24, 440, 432, 36, [](lv_event_t *) { gbBuildList(); });
+  if (!gbRomCount) extLabel(gbList, "Copy legally owned / homebrew .gb files into /roms, then tap Refresh.", 24, 150, 432, 20);
+  extButton(gbList, "Refresh", layout.refresh.x, layout.refresh.y, layout.refresh.w, layout.refresh.h,
+            [](lv_event_t *) { gbBuildList(); });
 }
 bool gbLoadRom(const String &path) {
   gbPersistSave(); gbReleaseResources();
@@ -143,7 +150,8 @@ bool gbLoadRom(const String &path) {
   gbCore->direct.joypad = 0xFF;
   gbCanvas = lv_canvas_create(extensionPages[EXT_GAMEBOY]);
   lv_canvas_set_buffer(gbCanvas, gbPixels, 320, 288, LV_IMG_CF_TRUE_COLOR);
-  lv_obj_set_pos(gbCanvas, 80, 84);
+  const ClockLayout::Gameboy layout = ClockLayout::gameboy(SCREEN_WIDTH, SCREEN_HEIGHT);
+  lv_obj_set_pos(gbCanvas, layout.canvas.x, layout.canvas.y);
   lv_obj_clear_flag(gbCanvas, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
   gbRunning = true; gbPaused = gbFatal = gbSaveDirty = false; gbButtons = 0;
   gbNextFrameUs = esp_timer_get_time(); gbLastSaveAt = millis();
@@ -166,7 +174,11 @@ void gbActionEvent(lv_event_t *event) {
   } else if (action == 2) {
     gbPersistSave(); gbReleaseResources();
     if (gbCanvas) { lv_obj_del(gbCanvas); gbCanvas = nullptr; }
-    lv_obj_clear_flag(gbList, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(gbList); gbBuildList();
+    lv_obj_clear_flag(gbList, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(gbList);
+    // The full-screen picker must never bury the escape route back to launcher.
+    if (extensionBackButtons[EXT_GAMEBOY])
+      lv_obj_move_foreground(extensionBackButtons[EXT_GAMEBOY]);
+    gbBuildList();
   }
 }
 void createGameboyPage() {
@@ -199,6 +211,10 @@ void createGameboyPage() {
   lv_obj_set_style_bg_opa(gbList, LV_OPA_COVER, 0);
   lv_obj_clear_flag(gbList, LV_OBJ_FLAG_SCROLLABLE);
   gbBuildList();
+  // gbList is a full-screen sibling created after extPage()'s back button.
+  // Raise the shared key above it so an empty ROM list is still escapable.
+  if (extensionBackButtons[EXT_GAMEBOY])
+    lv_obj_move_foreground(extensionBackButtons[EXT_GAMEBOY]);
   (void)accent;
 }
 void serviceGameboy() {
