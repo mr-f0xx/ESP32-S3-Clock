@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate native clock glyphs with lv_font_conv 1.5.3 and fonttools.
 
-Sources are pinned to a Google Fonts revision. Use --sizes 72 to add only the
-medium size without rewriting the existing 48/96 px assets. No runtime image or
+Sources are pinned to a Google Fonts revision. Use --sizes to regenerate selected native sizes without rewriting the others. No runtime image or
 font zoom is needed. Orbitron and Cinzel retain their existing bold weight.
 """
 import argparse
@@ -34,7 +33,7 @@ FONTS = {
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sizes", type=int, nargs="+", choices=(48, 72, 96), default=[48, 72, 96])
+    parser.add_argument("--sizes", type=int, nargs="+", choices=(48, 72, 96, 120), default=[48, 72, 120])
     args = parser.parse_args()
     converter = shutil.which("lv_font_conv")
     if not converter:

@@ -363,9 +363,7 @@ void createPhotoFramePage(lv_obj_t *screen) {
   lv_obj_set_style_radius(photoCountLabel, 10, 0);
   lv_obj_align(photoCountLabel, LV_ALIGN_TOP_RIGHT, -20, 24);
 
-  lv_obj_t *back = createRadioControlButton(photoFramePage, 52, -190, 26,
-                                            photoBackEvent, TABLER_ICON_CHEVRON_LEFT, 26);
-  (void)back;
+  createAppBackButton(photoFramePage, photoBackEvent, UI_ACCENT_VIOLET);
   createRadioControlButton(photoFramePage, 58, -110, 392, photoPreviousEvent,
                            TABLER_ICON_SKIP_BACK, 28);
   lv_obj_t *playButton = createRadioControlButton(photoFramePage, 74, 0, 384,

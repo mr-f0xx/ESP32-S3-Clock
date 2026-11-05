@@ -1,8 +1,10 @@
 // Power-key handling and low-power clock mode.
 // Included once by 08_LVGL_Clock.ino inside its private namespace.
 
-constexpr uint16_t LOW_POWER_PARTIAL_LONG_START = 40;
-constexpr uint16_t LOW_POWER_PARTIAL_LONG_END = 439;
+// Large 120 px faces can be almost 480 px wide; use the full panel width in
+// the AOD partial window so the selected clock size is never clipped.
+constexpr uint16_t LOW_POWER_PARTIAL_LONG_START = 0;
+constexpr uint16_t LOW_POWER_PARTIAL_LONG_END = 479;
 constexpr uint16_t LOW_POWER_PARTIAL_SHORT_START = 144;
 constexpr uint16_t LOW_POWER_PARTIAL_SHORT_END = 335;
 
@@ -304,10 +306,11 @@ void enterLowPowerClockMode() {
     // its layout and clipping bounds match the rendered glyphs.
     applyClockFont();
     lv_obj_align(timePanel, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_center(timeLabel);
-    lv_obj_clear_flag(timeLabel, LV_OBJ_FLAG_HIDDEN);
+    layoutTimeDigits();
+    setTimeDigitsVisible(true);
     applyClockColor();
-    lv_obj_set_style_text_opa(timeLabel, LV_OPA_COVER, 0);
+    setTimeDigitsOpacity(LV_OPA_COVER);
+    setColonVisible(true);
     lv_obj_clear_flag(timePanel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(timePanel);
     updateClock();
@@ -441,13 +444,13 @@ void exitLowPowerClockMode() {
     lv_obj_set_style_radius(timePanel, TIME_PANEL_RADIUS, 0);
   }
   lv_obj_align(timePanel, LV_ALIGN_TOP_LEFT, ClockLayout::scale(24, SCREEN_WIDTH), ClockLayout::scale(24, SCREEN_HEIGHT));
-  lv_obj_center(timeLabel);
+  layoutTimeDigits();
   applyClockColor();
   // Screen-off standby hides both objects. Restoring their normal styles does
   // not clear LVGL's hidden flags, which previously left the album clock
   // missing until reboot after waking with the AOD time option disabled.
-  lv_obj_set_style_text_opa(timeLabel, LV_OPA_COVER, 0);
-  lv_obj_clear_flag(timeLabel, LV_OBJ_FLAG_HIDDEN);
+  setTimeDigitsOpacity(LV_OPA_COVER);
+  setTimeDigitsVisible(true);
   lv_obj_clear_flag(timePanel, LV_OBJ_FLAG_HIDDEN);
   if (fsReady) loadBackgroundImage();
   // Pick centered-big (no background) vs top-left (wallpaper) after wake.

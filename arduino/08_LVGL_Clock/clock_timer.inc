@@ -261,10 +261,7 @@ void createTimerPage(lv_obj_t *screen) {
   lv_obj_add_event_cb(timerPage, appPageGestureEvent, LV_EVENT_GESTURE, nullptr);
   const ClockLayout::Timer l = ClockLayout::timer(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-  lv_obj_t *back = createRadioControlButton(timerPage, 52, -190, 26, timerBackEvent,
-                                            TABLER_ICON_CHEVRON_LEFT, 26);
-  lv_obj_set_pos(back, l.back.x, l.back.y);
-  lv_obj_set_size(back, l.back.w, l.back.h);
+  createAppBackButton(timerPage, timerBackEvent, UI_ACCENT_AMBER);
   lv_obj_t *title = createTimerLabel(l.title, tr(STR_TIMER), &lv_font_ui_24);
   i18nRegister(title, STR_TIMER);
   // No card behind the digits: mostly-off pixels and one restrained accent line.

@@ -281,9 +281,7 @@ void createWorldClockPage(lv_obj_t *screen) {
   lv_obj_add_flag(worldClockPage, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(worldClockPage, appPageGestureEvent, LV_EVENT_GESTURE, nullptr);
 
-  lv_obj_t *back = createRadioControlButton(worldClockPage, 52, -190, 26,
-                                            worldBackEvent, TABLER_ICON_CHEVRON_LEFT, 26);
-  (void)back;
+  createAppBackButton(worldClockPage, worldBackEvent, UI_ACCENT_BLUE);
   lv_obj_t *title = lv_label_create(worldClockPage);
   i18nRegister(title, STR_WORLD_CLOCK);
   lv_obj_set_style_text_font(title, &lv_font_ui_24, 0);
