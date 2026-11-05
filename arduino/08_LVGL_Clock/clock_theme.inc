@@ -57,7 +57,7 @@ static constexpr ThemePalette THEME_PALETTES[UI_THEME_COUNT] = {
   {0x050510, 0x10101B, 0x40405A, 0xF4F4FF, 0xA0A0B8,
    0xFFFFFF, 0x000000, false},
   // Icon Glow: transparent launcher tiles on true black, each icon keeps its
-  // own vivid neon hue and soft halo. Graphite app-control surfaces elsewhere.
+  // own vivid neon hue without a halo. Graphite app-control surfaces elsewhere.
   {0x000000, 0x262A33, 0x3A404C, 0xFFFFFF, 0x9AA3B2,
    0xFFFFFF, 0x000000, false},
 };

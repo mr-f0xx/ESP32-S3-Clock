@@ -1,6 +1,6 @@
 // Full-screen app menu opened by swiping upward from the clock's bottom edge.
-// App icons are native-size LVGL Alpha-8 assets generated from Tabler's
-// official 24x24, 2 px round-stroke outline artwork.
+// App icons use LVGL Alpha-8 assets generated from Tabler's official
+// 24x24, 2 px round-stroke artwork, scaled uniformly for the launcher.
 // Sources: https://tabler.io/icons/icon/clock
 //          https://tabler.io/icons/icon/calendar
 //          https://tabler.io/icons/icon/alarm
@@ -10,6 +10,8 @@
 
 constexpr int16_t APP_MENU_SIZE = 480;
 constexpr int16_t APP_MENU_TILE_SIZE = 176;
+// Larger glyphs retain 28 px of clearance on every side of a tile.
+constexpr lv_coord_t APP_MENU_ICON_SIZE = 120;
 constexpr int16_t APP_MENU_TILE_LEFT = 52;
 constexpr int16_t APP_MENU_TILE_TOP = 52;
 constexpr int16_t APP_MENU_TILE_GAP_X = 24;
@@ -880,8 +882,8 @@ void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
     lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
   } else if (themeIsGlow()) {
     // Keep the full tile touch target, but let the true-black launcher show
-    // through: no gray card or outline behind the icon. Only the icon carries
-    // the neon halo; pressing the tile still gives colored touch feedback.
+    // through: no gray card, outline or halo behind the icon. The icon keeps
+    // its neon color; pressing the tile still gives colored touch feedback.
     lv_obj_set_style_bg_color(button, lv_color_black(), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
@@ -938,13 +940,9 @@ void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
     // colors. Applying both is safe for either representation.
     lv_obj_set_style_img_recolor(icon, iconColor, 0);
     setTablerIconColor(icon, iconColor);
-    // Icon Glow theme: a soft neon halo hugging the icon, like the reference
-    // launcher. Other themes set width 0 so switching away removes the glow.
-    lv_obj_set_style_radius(icon, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_shadow_width(icon, themeIsGlow() ? 22 : 0, 0);
-    lv_obj_set_style_shadow_spread(icon, 2, 0);
-    lv_obj_set_style_shadow_color(icon, iconColor, 0);
-    lv_obj_set_style_shadow_opa(icon, LV_OPA_60, 0);
+    // Never shadow the icon container: its box becomes a glowing circle rather
+    // than following the transparent glyph. Keep the colored strokes unhaloed.
+    lv_obj_set_style_shadow_width(icon, 0, 0);
   }
 }
 
@@ -976,6 +974,11 @@ void createTablerAppIcon(lv_obj_t *button, const lv_img_dsc_t *icon) {
   lv_obj_t *image = lv_img_create(button);
   lv_img_set_src(image, icon);
   lv_obj_center(image);
+  // lv_img_set_src() sets the pivot to the source center. Scaling around that
+  // pivot keeps the enlarged glyph centered without allocating a larger asset.
+  const lv_coord_t sourceSize = max(icon->header.w, icon->header.h);
+  lv_img_set_antialias(image, true);
+  lv_img_set_zoom(image, LV_IMG_ZOOM_NONE * APP_MENU_ICON_SIZE / sourceSize);
   // Neon palettes collapse every accent to one hue, so the tile's original
   // color does not matter; pass 0 as the accent seed.
   lv_obj_set_style_img_recolor(image, appTileIconColor(0), 0);
@@ -1106,28 +1109,28 @@ void createAppMenu() {
   createTablerAppIcon(musicButton, &tabler_music);
   lv_obj_t *audiobookButton = createAppTile(
     appMenuPages[1], APP_MENU_AUDIOBOOK, 3, UI_ACCENT_MINT);
-  createTablerIcon(audiobookButton, TABLER_ICON_AUDIOBOOK, 80,
+  createTablerIcon(audiobookButton, TABLER_ICON_AUDIOBOOK, APP_MENU_ICON_SIZE,
     appTileIconColor(UI_ACCENT_MINT));
 
   lv_obj_t *radioButton = createAppTile(
     appMenuPages[2], APP_MENU_RADIO, 0, UI_ACCENT_MINT);
-  createTablerIcon(radioButton, TABLER_ICON_RADIO, 80,
+  createTablerIcon(radioButton, TABLER_ICON_RADIO, APP_MENU_ICON_SIZE,
     appTileIconColor(UI_ACCENT_MINT));
   lv_obj_t *powerButton = createAppTile(
     appMenuPages[2], APP_MENU_POWER, 1, UI_ACCENT_ROSE);
-  createTablerIcon(powerButton, TABLER_ICON_POWER, 80,
+  createTablerIcon(powerButton, TABLER_ICON_POWER, APP_MENU_ICON_SIZE,
     appTileIconColor(UI_ACCENT_ROSE));
   lv_obj_t *worldButton = createAppTile(
     appMenuPages[2], APP_MENU_WORLD_CLOCK, 2, UI_ACCENT_BLUE);
-  createTablerIcon(worldButton, TABLER_ICON_WORLD, 80,
+  createTablerIcon(worldButton, TABLER_ICON_WORLD, APP_MENU_ICON_SIZE,
     appTileIconColor(UI_ACCENT_BLUE));
   lv_obj_t *photoButton = createAppTile(
     appMenuPages[2], APP_MENU_PHOTO_FRAME, 3, UI_ACCENT_VIOLET);
-  createTablerIcon(photoButton, TABLER_ICON_PHOTO, 80,
+  createTablerIcon(photoButton, TABLER_ICON_PHOTO, APP_MENU_ICON_SIZE,
     appTileIconColor(UI_ACCENT_VIOLET));
   lv_obj_t *timerButton = createAppTile(
     appMenuPages[3], APP_MENU_TIMER, 0, UI_ACCENT_AMBER);
-  createTablerIcon(timerButton, TABLER_ICON_TIMER, 80,
+  createTablerIcon(timerButton, TABLER_ICON_TIMER, APP_MENU_ICON_SIZE,
     appTileIconColor(UI_ACCENT_AMBER));
 
   const AppMenuItem utilityItems[] = {APP_MENU_CALCULATOR, APP_MENU_NOTES, APP_MENU_STOPWATCH};
@@ -1137,8 +1140,9 @@ void createAppMenu() {
   for (uint8_t i = 0; i < 3; ++i) {
     lv_obj_t *tile = createAppTile(appMenuPages[3], utilityItems[i], i + 1, utilityColors[i]);
     // Icon-only tile (no title), matching the other launcher tiles. The icon is
-    // child 0 so applyAppTileTheme() recolors / glows it on theme change.
-    createTablerIcon(tile, utilityIcons[i], 80, appTileIconColor(utilityColors[i]));
+    // child 0 so applyAppTileTheme() recolors it on theme change.
+    createTablerIcon(tile, utilityIcons[i], APP_MENU_ICON_SIZE,
+      appTileIconColor(utilityColors[i]));
   }
 
   for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
