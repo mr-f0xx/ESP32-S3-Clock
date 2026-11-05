@@ -15,7 +15,7 @@ uint32_t hudHistory[12] = {};
 
 void IRAM_ATTR hudPromiscuousCallback(void *buffer, wifi_promiscuous_pkt_type_t type) {
   const wifi_promiscuous_pkt_t *packet = static_cast<const wifi_promiscuous_pkt_t *>(buffer);
-  if (!packet || packet->rx_ctrl.payload_len < 2) return;
+  if (!packet || packet->rx_ctrl.sig_len < 2) return;
   // Only these two header bytes are inspected. Nothing from the frame is kept.
   const uint8_t frameType = (packet->payload[0] >> 2) & 3;
   if (frameType == 0) ++hudManagement;
@@ -126,7 +126,10 @@ void serviceWifiHud() {
   uint32_t peak = 10;
   for (uint32_t value : hudHistory) peak = max(peak, value);
   for (uint8_t i = 0; i < 12; ++i) {
-    if (hudBars[i]) lv_obj_set_height(hudBars[i], max(2U, hudHistory[i] * 34 / peak));
+    if (hudBars[i]) {
+      const uint32_t height = hudHistory[i] * 34 / peak;
+      lv_obj_set_height(hudBars[i], height < 2 ? 2 : height);
+    }
   }
   if (hudStats) lv_label_set_text_fmt(hudStats, "CH %u   %.0f frames/s   %lu total\nMgmt %lu   Data %lu   Ctrl %lu\nRSSI: weak %lu / mid %lu / strong %lu",
     hudChannel, hudRate, total, hudManagement, hudData, hudControl, hudWeak, hudMedium, hudStrong);
