@@ -157,7 +157,26 @@ static void testWeather(int16_t w, int16_t h) {
   separated(l.minutelyChart, l.minutelyX[0], "minutely chart/x");
 }
 
+static void testCenteredLineRect() {
+  const Rect rows[] = {{76, 20, 140, 32}, {316, 208, 124, 40},
+                       {92, 198, 128, 26}, {4, 0, 132, 44}};
+  const int16_t lines[] = {0, 1, 20, 22, 27, 40, 60};
+  for (const Rect &row : rows) {
+    for (int16_t line : lines) {
+      const Rect centered = centeredLineRect(row, line);
+      assert(centered.x == row.x && centered.w == row.w);
+      assert(centered.h > 0 && centered.h <= row.h);
+      assert(centered.y >= row.y && centered.bottom() <= row.bottom());
+      const int rowCenter = row.y + row.h / 2;
+      const int textCenter = centered.y + centered.h / 2;
+      assert(textCenter >= rowCenter - 1 && textCenter <= rowCenter + 1);
+      if (line > 0 && line < row.h) assert(centered.h == line);
+    }
+  }
+}
+
 int main() {
+  testCenteredLineRect();
   assert(migrateTheme(0, false) == THEME_GLOW);
   for (uint8_t old = 1; old <= 6; ++old) assert(migrateTheme(old, false) == old);
   assert(migrateTheme(7, false) == THEME_GLOW);
@@ -175,6 +194,6 @@ int main() {
     testTimer(size[0], size[1]);
     testWeather(size[0], size[1]);
   }
-  std::puts("layout: control/Wi-Fi rows, Game Boy back button, timer/weather bounds, theme migration and clock sizes OK");
+  std::puts("layout: centered line boxes, control/Wi-Fi rows, Game Boy back button, timer/weather bounds, theme migration and clock sizes OK");
   return 0;
 }

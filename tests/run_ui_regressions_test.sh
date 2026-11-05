@@ -19,6 +19,12 @@ i18n = (root / "clock_i18n.inc").read_text()
 assert re.search(r"void setControlRect\([^)]*\) \{\s*(?://[^\n]*\n\s*)*lv_obj_set_align\(object, LV_ALIGN_TOP_LEFT\);", control)
 assert re.search(r"void placeControlIcon\([^)]*\) \{\s*lv_obj_update_layout\(icon\);\s*lv_obj_set_align\(icon, LV_ALIGN_TOP_LEFT\);", control)
 assert "lv_obj_set_align(*icon, LV_ALIGN_TOP_LEFT);" in control
+# Single-line control text must be centered by font line height, not painted at
+# the top of a taller fixed label box (the high pills / 94% / AUTO report).
+assert "inline Rect centeredLineRect(" in layout
+assert "ClockLayout::centeredLineRect(" in control
+assert "lv_obj_set_height(label, lv_font_get_line_height(&lv_font_ui_16));" in control
+assert "lv_label_long_mode_t longMode = LV_LABEL_LONG_DOT" in control
 # Active connectivity cards must not paint accent text on an accent fill.
 assert "themeTint(UI_ACCENT_BLUE, LV_OPA_30)" in control
 assert "wifiUserEnabled ? activeTextColor : themeIcon()" in control
@@ -55,5 +61,5 @@ assert '{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"}' in i18n
 assert "calendarDrawPartEvent" in menu
 assert "dsc->rect_dsc->radius = 16;" in menu
 assert "calendarTodayEvent" in menu
-print("ui regressions: alignment-safe control centre, shared back button, Glow mode tiles, 120 px clock, colon blink, burn-in shift, calendar polish OK")
+print("ui regressions: vertically centered control text, alignment-safe control centre, shared back button, Glow mode tiles, 120 px clock, colon blink, burn-in shift, calendar polish OK")
 PY

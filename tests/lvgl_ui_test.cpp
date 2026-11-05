@@ -1,6 +1,7 @@
-// Headless LVGL regression for the two visual traps reported on the device:
-// long Wi-Fi names wrapping into the IP row, and the Game Boy ROM picker burying
-// the shared back button. Uses the real LVGL label/layout engine, not a mock.
+// Headless LVGL regression for device-visible layout traps: long Wi-Fi names
+// wrapping into the IP row, the Game Boy ROM picker burying the shared back
+// button, and control-centre text painting high inside its tile because LVGL
+// labels anchor the first line to the top of a fixed-height object box.
 #include <lvgl.h>
 #include <cassert>
 #include <cstdio>
@@ -13,15 +14,24 @@ static void flush(lv_disp_drv_t *driver, const lv_area_t *, lv_color_t *) {
 }
 static lv_obj_t *controlLabel(lv_obj_t *parent, const ClockLayout::Rect &r,
                               const char *text, const lv_font_t *font) {
+  const ClockLayout::Rect line = ClockLayout::centeredLineRect(
+    r, static_cast<int16_t>(lv_font_get_line_height(font)));
   lv_obj_t *label = lv_label_create(parent);
-  lv_obj_set_pos(label, r.x, r.y);
-  lv_obj_set_size(label, r.w, r.h);
+  lv_obj_set_align(label, LV_ALIGN_TOP_LEFT);
+  lv_obj_set_pos(label, line.x, line.y);
+  lv_obj_set_size(label, line.w, line.h);
   lv_obj_set_style_pad_all(label, 0, 0);
   lv_obj_set_style_text_font(label, font, 0);
   lv_label_set_text(label, text);
   lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
   lv_obj_update_layout(label);
   return label;
+}
+static void assertCenteredInRow(lv_obj_t *label, const ClockLayout::Rect &row) {
+  const int labelCenter = lv_obj_get_y(label) + lv_obj_get_height(label) / 2;
+  const int rowCenter = row.y + row.h / 2;
+  assert(labelCenter >= rowCenter - 1 && labelCenter <= rowCenter + 1);
+  assert(lv_obj_get_height(label) <= row.h);
 }
 int main() {
   lv_init();
@@ -43,6 +53,44 @@ int main() {
   assert(lv_obj_get_height(ip) <= control.wifiIp.h);
   assert(lv_obj_get_y(ssid) + lv_obj_get_height(ssid) <= lv_obj_get_y(ip));
   assert(lv_obj_get_x(ssid) + lv_obj_get_width(ssid) <= control.wifi.right());
+  assertCenteredInRow(ssid, control.wifiStatus);
+  assertCenteredInRow(ip, control.wifiIp);
+
+  lv_obj_t *battery = controlLabel(screen, control.battery, "94%", &lv_font_montserrat_22);
+  lv_obj_t *rotation = controlLabel(screen, control.rotationStatus, "AUTO", &lv_font_montserrat_18);
+  assertCenteredInRow(battery, control.battery);
+  assertCenteredInRow(rotation, control.rotationStatus);
+  // The battery/lock icons are centered in their own 40 px rects; the text
+  // centerline must match the icon centerline, not sit one line-box above it.
+  const int batteryIconCenter = control.batteryIcon.y + control.batteryIcon.h / 2;
+  const int batteryTextCenter = lv_obj_get_y(battery) + lv_obj_get_height(battery) / 2;
+  assert(batteryTextCenter >= batteryIconCenter - 1 && batteryTextCenter <= batteryIconCenter + 1);
+  const int lockIconCenter = control.rotationIcon.y + control.rotationIcon.h / 2;
+  const int lockTextCenter = lv_obj_get_y(rotation) + lv_obj_get_height(rotation) / 2;
+  assert(lockTextCenter >= lockIconCenter - 1 && lockTextCenter <= lockIconCenter + 1);
+
+  // The five top pills use a one-line label centered inside the button, not a
+  // tall label box whose glyphs render at the top of the tile.
+  lv_obj_t *pill = lv_btn_create(screen);
+  const ClockLayout::Rect pillRect = control.settings[0];
+  lv_obj_set_pos(pill, pillRect.x, pillRect.y);
+  lv_obj_set_size(pill, pillRect.w, pillRect.h);
+  lv_obj_set_style_pad_all(pill, 2, 0);
+  lv_obj_t *pillLabel = lv_label_create(pill);
+  lv_obj_set_width(pillLabel, pillRect.w - 8);
+  lv_obj_set_height(pillLabel, lv_font_get_line_height(&lv_font_montserrat_16));
+  lv_obj_set_style_text_font(pillLabel, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_align(pillLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_label_set_long_mode(pillLabel, LV_LABEL_LONG_DOT);
+  lv_label_set_text(pillLabel, "Theme GLW");
+  lv_obj_center(pillLabel);
+  lv_obj_update_layout(pill);
+  lv_area_t pillArea, pillLabelArea;
+  lv_obj_get_coords(pill, &pillArea);
+  lv_obj_get_coords(pillLabel, &pillLabelArea);
+  const int pillCenter = pillArea.y1 + lv_area_get_height(&pillArea) / 2;
+  const int pillTextCenter = pillLabelArea.y1 + lv_area_get_height(&pillLabelArea) / 2;
+  assert(pillTextCenter >= pillCenter - 1 && pillTextCenter <= pillCenter + 1);
 
   const ClockLayout::Gameboy gb = ClockLayout::gameboy(480, 480);
   lv_obj_t *page = lv_obj_create(screen);
@@ -58,6 +106,6 @@ int main() {
   assert(!gb.back.overlaps(gb.title));
   assert(!gb.back.overlaps(gb.canvas));
 
-  std::puts("lvgl ui: long Wi-Fi SSID stays above IP; Game Boy back stays above ROM picker OK");
+  std::puts("lvgl ui: Wi-Fi rows, Game Boy back, pill/battery/lock vertical centering OK");
   return 0;
 }

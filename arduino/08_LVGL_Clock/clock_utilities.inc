@@ -5,12 +5,35 @@ lv_obj_t *utilityPage = nullptr;
 lv_obj_t *utilityDisplay = nullptr;
 lv_obj_t *utilityNote = nullptr;
 lv_obj_t *utilityStatus = nullptr;
+lv_obj_t *utilityNotePanel = nullptr;
+lv_obj_t *utilityNoteKeyboard = nullptr;
 uint8_t utilityActive = 255;
 UtilityCalculator utilityCalculator;
 String utilitySavedNote;
 bool stopwatchRunning = false;
 uint32_t stopwatchAccumulated = 0;
 uint32_t stopwatchStartedAt = 0;
+
+// Notes is a reader first: opening it lists /notes/*.txt from the shared SD
+// mount and never constructs the keyboard. The keyboard exists only after an
+// explicit New/Edit action. The old single NVS note remains a no-SD fallback
+// and is migrated to /notes/legacy-note.txt once the card is available.
+constexpr uint8_t UTILITY_NOTE_LIMIT = 24;
+constexpr uint16_t UTILITY_NOTE_MAX_LENGTH = 4096;
+constexpr char UTILITY_NOTE_DIRECTORY[] = "/notes";
+constexpr char UTILITY_NOTE_LEGACY_FILE[] = "/notes/legacy-note.txt";
+String utilityNotePaths[UTILITY_NOTE_LIMIT];
+uint8_t utilityNoteCount = 0;
+int8_t utilityNoteSelected = -1;
+String utilityNoteDraft;
+String utilityNoteStatusText;
+bool utilityNoteEditing = false;
+bool utilityNoteDirty = false;
+bool utilityNoteOnSd = false;
+bool utilityNotesPrepared = false;
+
+void rebuildUtilityPage();
+void openUtilityApp(uint8_t app);
 
 // Per-app accent, collapsed onto the theme accent for amber / neon palettes.
 uint32_t utilityAccentColor() {
@@ -90,38 +113,331 @@ void styleUtilityKeyboard(lv_obj_t *keyboard, lv_color_t accent) {
   lv_obj_set_style_text_color(keyboard, themeTextOnAccent(), LV_PART_ITEMS | LV_STATE_PRESSED);
 }
 
+void setUtilityNoteStatus(const String &text) {
+  utilityNoteStatusText = text;
+  if (utilityStatus) lv_label_set_text(utilityStatus, utilityNoteStatusText.c_str());
+}
+
+// Notes writes/remounts the same FAT volume used by the SD audio players. Stop
+// those readers before a destructive SD operation instead of unmounting under
+// an open AudioFileSourceSD.
+void utilityReleaseSdAudio() {
+  stopMusicPlayback();
+  stopAudiobookPlayback();
+}
+
+String utilityNoteBaseName(const String &path) {
+  const int slash = path.lastIndexOf('/');
+  String name = slash >= 0 ? path.substring(slash + 1) : path;
+  if (name.length() > 4) {
+    String suffix = name.substring(name.length() - 4);
+    suffix.toLowerCase();
+    if (suffix == ".txt") name = name.substring(0, name.length() - 4);
+  }
+  return name;
+}
+
+bool utilityNoteIsTextFile(const String &path) {
+  const String name = utilityNoteBaseName(path);
+  if (!name.length() || name[0] == '.') return false;
+  String lower = path;
+  lower.toLowerCase();
+  return lower.endsWith(".txt");
+}
+
+bool utilityNoteReadFile(const String &path, String &text) {
+  text = "";
+  File file = SD.open(path.c_str(), FILE_READ);
+  if (!file || file.isDirectory()) {
+    if (file) file.close();
+    return false;
+  }
+  const size_t size = file.size();
+  if (size > UTILITY_NOTE_MAX_LENGTH) {
+    file.close();
+    return false;
+  }
+  text.reserve(size);
+  char buffer[128];
+  size_t remaining = size;
+  while (remaining > 0 && file.available()) {
+    const size_t want = remaining < sizeof(buffer) ? remaining : sizeof(buffer);
+    const size_t got = file.readBytes(buffer, want);
+    if (!got) break;
+    text.concat(buffer, static_cast<unsigned int>(got));
+    remaining -= got;
+  }
+  file.close();
+  return remaining == 0;
+}
+
+// Write to a temporary file, verify it, keep the previous revision as .bak,
+// then rename into place. A failed rename restores the backup rather than
+// leaving the visible note half-written.
+bool utilityNoteWriteFileAtomic(const String &path, const String &text) {
+  if (text.length() > UTILITY_NOTE_MAX_LENGTH) return false;
+  const String temporary = path + ".tmp";
+  const String backup = path + ".bak";
+  SD.remove(temporary.c_str());
+  File file = SD.open(temporary.c_str(), FILE_WRITE);
+  if (!file) return false;
+  const size_t written = file.print(text);
+  file.flush();
+  file.close();
+  if (written != text.length()) {
+    SD.remove(temporary.c_str());
+    return false;
+  }
+  String verified;
+  if (!utilityNoteReadFile(temporary, verified) || verified != text) {
+    SD.remove(temporary.c_str());
+    return false;
+  }
+  const bool hadOriginal = SD.exists(path.c_str());
+  if (hadOriginal) {
+    SD.remove(backup.c_str());
+    if (!SD.rename(path.c_str(), backup.c_str())) {
+      SD.remove(temporary.c_str());
+      return false;
+    }
+  }
+  if (!SD.rename(temporary.c_str(), path.c_str())) {
+    if (hadOriginal) SD.rename(backup.c_str(), path.c_str());
+    SD.remove(temporary.c_str());
+    return false;
+  }
+  return true;
+}
+
+void utilityNoteScanLibrary() {
+  utilityNoteCount = 0;
+  if (!SD.exists(UTILITY_NOTE_DIRECTORY) && !SD.mkdir(UTILITY_NOTE_DIRECTORY)) return;
+  File directory = SD.open(UTILITY_NOTE_DIRECTORY);
+  if (!directory || !directory.isDirectory()) {
+    if (directory) directory.close();
+    return;
+  }
+  File entry;
+  while (utilityNoteCount < UTILITY_NOTE_LIMIT && (entry = directory.openNextFile())) {
+    if (!entry.isDirectory()) {
+      const char *entryPath = entry.path();
+      String path = entryPath ? entryPath : entry.name();
+      if (!path.startsWith("/")) path = String(UTILITY_NOTE_DIRECTORY) + "/" + path;
+      if (utilityNoteIsTextFile(path) && entry.size() <= UTILITY_NOTE_MAX_LENGTH)
+        utilityNotePaths[utilityNoteCount++] = path;
+    }
+    entry.close();
+  }
+  directory.close();
+  for (uint8_t i = 0; i < utilityNoteCount; ++i)
+    for (uint8_t j = i + 1; j < utilityNoteCount; ++j)
+      if (utilityNotePaths[j].compareTo(utilityNotePaths[i]) < 0) {
+        const String swap = utilityNotePaths[i];
+        utilityNotePaths[i] = utilityNotePaths[j];
+        utilityNotePaths[j] = swap;
+      }
+}
+
+bool utilityNoteMigrateLegacy(const String &legacy) {
+  if (!legacy.length()) return true;
+  if (SD.exists(UTILITY_NOTE_LEGACY_FILE)) return true;
+  if (!utilityNoteWriteFileAtomic(UTILITY_NOTE_LEGACY_FILE, legacy)) return false;
+  String verified;
+  if (!utilityNoteReadFile(UTILITY_NOTE_LEGACY_FILE, verified) || verified != legacy)
+    return false;
+  preferences.remove("utility_note");
+  return true;
+}
+
+void prepareUtilityNotes(bool forceRemount) {
+  utilityNotesPrepared = true;
+  utilityNoteEditing = false;
+  utilityNoteDirty = false;
+  utilityNoteSelected = -1;
+  utilityNoteOnSd = false;
+  utilityNoteDraft = "";
+  utilitySavedNote = "";
+  utilityNoteCount = 0;
+  const String legacy = preferences.getString("utility_note", "");
+  if (!weatherWallpaperSdReadyForOtherUsers()) {
+    utilitySavedNote = legacy;
+    utilityNoteDraft = legacy;
+    setUtilityNoteStatus(tr(STR_SD_BUSY));
+    return;
+  }
+  if (forceRemount) utilityReleaseSdAudio();
+  const bool mounted = forceRemount ? remountMusicSd() : mountMusicSd();
+  if (!mounted) {
+    utilitySavedNote = legacy;
+    utilityNoteDraft = legacy;
+    setUtilityNoteStatus(tr(STR_SD_UNAVAILABLE));
+    return;
+  }
+  const bool migrated = utilityNoteMigrateLegacy(legacy);
+  utilityNoteScanLibrary();
+  if (utilityNoteCount) {
+    char text[48];
+    snprintf(text, sizeof(text), tr(STR_NOTE_COUNT_FMT),
+             static_cast<unsigned>(utilityNoteCount));
+    setUtilityNoteStatus(text);
+  } else if (legacy.length() && !migrated) {
+    utilitySavedNote = legacy;
+    utilityNoteDraft = legacy;
+    setUtilityNoteStatus(tr(STR_NOTE_SAVE_FAILED));
+  } else {
+    setUtilityNoteStatus(tr(STR_NOTE_EMPTY));
+  }
+}
+
+String utilityNoteNextPath() {
+  for (uint16_t index = 1; index <= 999; ++index) {
+    char path[40];
+    snprintf(path, sizeof(path), "%s/note-%03u.txt", UTILITY_NOTE_DIRECTORY,
+             static_cast<unsigned>(index));
+    if (!SD.exists(path)) return String(path);
+  }
+  return String();
+}
+
 bool saveUtilityNote() {
   if (!utilityNote) return true;
-  const String text = lv_textarea_get_text(utilityNote);
-  if (text == utilitySavedNote) return true;
-  if (preferences.putString("utility_note", text) == 0) return false;
-  utilitySavedNote = text;
+  utilityNoteDraft = lv_textarea_get_text(utilityNote);
+  if (!utilityNoteDirty && utilityNoteDraft == utilitySavedNote) return true;
+  if (!utilityNoteDraft.length() && !utilityNoteOnSd && utilityNoteSelected < 0) {
+    setUtilityNoteStatus(tr(STR_NOTE_EMPTY));
+    return false;
+  }
+  if (weatherWallpaperSdReadyForOtherUsers() && mountMusicSd()) {
+    utilityReleaseSdAudio();
+    const String path = utilityNoteOnSd && utilityNoteSelected >= 0 &&
+                        static_cast<uint8_t>(utilityNoteSelected) < utilityNoteCount
+                          ? utilityNotePaths[utilityNoteSelected]
+                          : utilityNoteNextPath();
+    if (!path.length() || !utilityNoteWriteFileAtomic(path, utilityNoteDraft)) {
+      setUtilityNoteStatus(tr(STR_NOTE_SAVE_FAILED));
+      return false;
+    }
+    if (!utilityNoteOnSd) preferences.remove("utility_note");
+    utilitySavedNote = utilityNoteDraft;
+    utilityNoteDirty = false;
+    utilityNoteOnSd = true;
+    utilityNoteScanLibrary();
+    utilityNoteSelected = -1;
+    for (uint8_t i = 0; i < utilityNoteCount; ++i)
+      if (utilityNotePaths[i] == path) utilityNoteSelected = static_cast<int8_t>(i);
+    setUtilityNoteStatus(tr(STR_NOTE_SD_SAVED));
+    return true;
+  }
+  // An SD-backed note must not silently fall back to a different local note.
+  if (utilityNoteOnSd) {
+    setUtilityNoteStatus(tr(STR_SD_UNAVAILABLE));
+    return false;
+  }
+  if (preferences.putString("utility_note", utilityNoteDraft) == 0) {
+    setUtilityNoteStatus(tr(STR_NOTE_SAVE_FAILED));
+    return false;
+  }
+  utilitySavedNote = utilityNoteDraft;
+  utilityNoteDirty = false;
+  utilityNoteSelected = -1;
+  setUtilityNoteStatus(tr(STR_NOTE_LOCAL_SAVED));
   return true;
 }
 
 void utilityBackEvent(lv_event_t *event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !utilityPage) return;
   markUserActivity();
-  if (utilityActive == 1 && !saveUtilityNote()) {
-    lv_label_set_text(utilityStatus, tr(STR_NOTE_SAVE_FAILED));
-    return;
+  if (utilityActive == 1) {
+    if (utilityNoteEditing) {
+      if (!saveUtilityNote()) return;
+      utilityNoteEditing = false;
+      consumeCurrentTouchRelease();
+      rebuildUtilityPage();
+      return;
+    }
+    if (utilityNoteSelected >= 0) {
+      utilityNoteSelected = -1;
+      char text[48];
+      snprintf(text, sizeof(text), tr(STR_NOTE_COUNT_FMT),
+               static_cast<unsigned>(utilityNoteCount));
+      setUtilityNoteStatus(utilityNoteCount ? String(text) : String(tr(STR_NOTE_EMPTY)));
+      consumeCurrentTouchRelease();
+      rebuildUtilityPage();
+      return;
+    }
   }
   consumeCurrentTouchRelease();
   appMenuClickSuppressedUntil = millis() + 350;
   lv_obj_del_async(utilityPage);
   utilityPage = utilityDisplay = utilityNote = utilityStatus = nullptr;
+  utilityNotePanel = utilityNoteKeyboard = nullptr;
   utilityActive = 255;
 }
 
 void utilitySaveEvent(lv_event_t *event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED || !utilityNote) return;
   markUserActivity();
-  lv_label_set_text(utilityStatus, tr(saveUtilityNote() ? STR_NOTE_SAVED : STR_NOTE_SAVE_FAILED));
+  if (!saveUtilityNote()) return;
+  utilityNoteEditing = false;
+  consumeCurrentTouchRelease();
+  rebuildUtilityPage();
 }
 
 void utilityNoteChanged(lv_event_t *event) {
-  if (lv_event_get_code(event) == LV_EVENT_VALUE_CHANGED && utilityStatus)
-    lv_label_set_text(utilityStatus, "");
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  utilityNoteDirty = true;
+  setUtilityNoteStatus("");
+}
+
+void utilityNoteListEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  markUserActivity();
+  const uint8_t index = static_cast<uint8_t>(reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
+  if (index >= utilityNoteCount) return;
+  String text;
+  if (!utilityNoteReadFile(utilityNotePaths[index], text)) {
+    setUtilityNoteStatus(tr(STR_NOTE_OPEN_FAILED));
+    return;
+  }
+  utilityNoteSelected = static_cast<int8_t>(index);
+  utilityNoteDraft = utilitySavedNote = text;
+  utilityNoteOnSd = true;
+  utilityNoteDirty = false;
+  setUtilityNoteStatus(utilityNoteBaseName(utilityNotePaths[index]));
+  consumeCurrentTouchRelease();
+  rebuildUtilityPage();
+}
+
+void utilityNoteNewEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  markUserActivity();
+  utilityNoteSelected = -1;
+  utilityNoteOnSd = false;
+  utilityNoteDraft = "";
+  utilitySavedNote = "";
+  utilityNoteDirty = true;
+  utilityNoteEditing = true;
+  setUtilityNoteStatus("");
+  consumeCurrentTouchRelease();
+  rebuildUtilityPage();
+}
+
+void utilityNoteEditEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  markUserActivity();
+  utilityNoteEditing = true;
+  utilityNoteDirty = false;
+  setUtilityNoteStatus("");
+  consumeCurrentTouchRelease();
+  rebuildUtilityPage();
+}
+
+void utilityNoteRefreshEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  markUserActivity();
+  prepareUtilityNotes(true);
+  consumeCurrentTouchRelease();
+  rebuildUtilityPage();
 }
 
 void utilityCalculatorEvent(lv_event_t *event) {
@@ -162,6 +478,95 @@ void serviceUtilityApps() {
   if (strcmp(lv_label_get_text(utilityDisplay), text)) lv_label_set_text(utilityDisplay, text);
 }
 
+void buildUtilityNotesReader(lv_obj_t *page, lv_color_t accent) {
+  utilityNotePanel = lv_obj_create(page);
+  lv_obj_remove_style_all(utilityNotePanel);
+  lv_obj_set_pos(utilityNotePanel, 20, 88);
+  lv_obj_set_size(utilityNotePanel, 440, 292);
+  lv_obj_set_style_bg_color(utilityNotePanel, lv_color_hex(themeSurface(0x0A0A0F)), 0);
+  lv_obj_set_style_bg_opa(utilityNotePanel, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(utilityNotePanel, themeControlRadius(12), 0);
+  lv_obj_set_style_border_width(utilityNotePanel, 1, 0);
+  lv_obj_set_style_border_color(utilityNotePanel, accent, 0);
+  lv_obj_set_style_pad_all(utilityNotePanel, 12, 0);
+  lv_obj_set_scroll_dir(utilityNotePanel, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(utilityNotePanel, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_clear_flag(utilityNotePanel, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+
+  utilityStatus = lv_label_create(page);
+  lv_obj_set_pos(utilityStatus, 20, 388);
+  lv_obj_set_size(utilityStatus, 440, 24);
+  lv_obj_set_style_text_font(utilityStatus, &lv_font_ui_16, 0);
+  lv_obj_set_style_text_color(utilityStatus, accent, 0);
+  lv_label_set_long_mode(utilityStatus, LV_LABEL_LONG_DOT);
+  lv_label_set_text(utilityStatus, utilityNoteStatusText.c_str());
+
+  const bool showNote = utilityNoteSelected >= 0 ||
+                        (!utilityNoteOnSd && utilitySavedNote.length());
+  if (showNote) {
+    lv_obj_t *body = lv_label_create(utilityNotePanel);
+    lv_obj_set_width(body, 416);
+    lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(body, &lv_font_ui_20, 0);
+    lv_obj_set_style_text_color(body, themeText(), 0);
+    lv_label_set_text(body, utilityNoteDraft.length() ? utilityNoteDraft.c_str()
+                                                      : tr(STR_NOTE_EMPTY));
+    utilityButton(page, tr(STR_NOTE_NEW), 20, 420, 136, 48, utilityNoteNewEvent, 0, 1);
+    utilityButton(page, tr(STR_NOTE_EDIT), 172, 420, 136, 48, utilityNoteEditEvent, 0, 2);
+    utilityButton(page, tr(STR_NOTE_REFRESH), 324, 420, 136, 48, utilityNoteRefreshEvent, 0, 0);
+    return;
+  }
+
+  if (!utilityNoteCount) {
+    lv_obj_t *empty = lv_label_create(utilityNotePanel);
+    lv_obj_set_width(empty, 416);
+    lv_label_set_long_mode(empty, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(empty, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(empty, &lv_font_ui_20, 0);
+    lv_obj_set_style_text_color(empty, themeTextDim(0x8A93A6), 0);
+    lv_label_set_text(empty, tr(STR_NOTE_EMPTY_HINT));
+    lv_obj_align(empty, LV_ALIGN_TOP_MID, 0, 80);
+  } else {
+    for (uint8_t i = 0; i < utilityNoteCount; ++i) {
+      lv_obj_t *row = utilityButton(utilityNotePanel,
+                                    utilityNoteBaseName(utilityNotePaths[i]).c_str(),
+                                    0, i * 56, 416, 48, utilityNoteListEvent, i, 0);
+      lv_obj_t *label = lv_obj_get_child(row, 0);
+      lv_obj_set_width(label, 384);
+      lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+      lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+      lv_obj_align(label, LV_ALIGN_LEFT_MID, 8, 0);
+    }
+  }
+  utilityButton(page, tr(STR_NOTE_NEW), 20, 420, 212, 48, utilityNoteNewEvent, 0, 2);
+  utilityButton(page, tr(STR_NOTE_REFRESH), 248, 420, 212, 48, utilityNoteRefreshEvent, 0, 1);
+}
+
+void buildUtilityNotesEditor(lv_obj_t *page, lv_color_t accent) {
+  utilityNote = lv_textarea_create(page);
+  lv_obj_set_pos(utilityNote, 20, 72);
+  lv_obj_set_size(utilityNote, 440, 112);
+  lv_textarea_set_max_length(utilityNote, UTILITY_NOTE_MAX_LENGTH);
+  lv_textarea_set_text(utilityNote, utilityNoteDraft.c_str());
+  styleUtilityNote(utilityNote, accent);
+  lv_obj_add_event_cb(utilityNote, utilityNoteChanged, LV_EVENT_VALUE_CHANGED, nullptr);
+
+  utilityStatus = lv_label_create(page);
+  lv_obj_set_pos(utilityStatus, 20, 190);
+  lv_obj_set_size(utilityStatus, 270, 44);
+  lv_obj_set_style_text_font(utilityStatus, &lv_font_ui_16, 0);
+  lv_obj_set_style_text_color(utilityStatus, accent, 0);
+  lv_label_set_long_mode(utilityStatus, LV_LABEL_LONG_WRAP);
+  lv_label_set_text(utilityStatus, utilityNoteStatusText.c_str());
+  utilityButton(page, tr(STR_SAVE_NOTE), 310, 190, 150, 44, utilitySaveEvent, 0, 2);
+
+  utilityNoteKeyboard = lv_keyboard_create(page);
+  lv_obj_set_size(utilityNoteKeyboard, 480, 238);
+  lv_obj_align(utilityNoteKeyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+  styleUtilityKeyboard(utilityNoteKeyboard, accent);
+  lv_keyboard_set_textarea(utilityNoteKeyboard, utilityNote);
+}
+
 void openUtilityApp(uint8_t app) {
   if (app > 2 || utilityPage || !appMenu) return;
   utilityActive = app;
@@ -199,26 +604,9 @@ void openUtilityApp(uint8_t app) {
                     i == 16 ? 420 : 96, 56, utilityCalculatorEvent, keys[i][0], kind);
     }
   } else if (app == 1) {
-    utilitySavedNote = preferences.getString("utility_note", "");
-    utilityNote = lv_textarea_create(utilityPage);
-    lv_obj_set_pos(utilityNote, 20, 72);
-    lv_obj_set_size(utilityNote, 440, 108);
-    lv_textarea_set_max_length(utilityNote, 512);
-    lv_textarea_set_text(utilityNote, utilitySavedNote.c_str());
-    styleUtilityNote(utilityNote, accent);
-    lv_obj_add_event_cb(utilityNote, utilityNoteChanged, LV_EVENT_VALUE_CHANGED, nullptr);
-    utilityStatus = lv_label_create(utilityPage);
-    lv_obj_set_style_text_color(utilityStatus, accent, 0);
-    lv_obj_set_style_text_font(utilityStatus, &lv_font_ui_16, 0);
-    lv_obj_set_pos(utilityStatus, 20, 190);
-    lv_obj_set_size(utilityStatus, 270, 36);
-    lv_label_set_long_mode(utilityStatus, LV_LABEL_LONG_WRAP);
-    utilityButton(utilityPage, tr(STR_SAVE_NOTE), 310, 187, 150, 45, utilitySaveEvent, 0, 2);
-    lv_obj_t *keyboard = lv_keyboard_create(utilityPage);
-    lv_obj_set_size(keyboard, 480, 238);
-    lv_obj_align(keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
-    styleUtilityKeyboard(keyboard, accent);
-    lv_keyboard_set_textarea(keyboard, utilityNote);
+    if (!utilityNotesPrepared) prepareUtilityNotes(false);
+    if (utilityNoteEditing) buildUtilityNotesEditor(utilityPage, accent);
+    else buildUtilityNotesReader(utilityPage, accent);
   } else {
     utilityDisplay = lv_label_create(utilityPage);
     lv_obj_set_style_text_font(utilityDisplay, &lv_font_ui_32, 0);
@@ -232,15 +620,21 @@ void openUtilityApp(uint8_t app) {
   lv_obj_move_foreground(utilityPage);
 }
 
-// Re-apply the active theme to an open tool by rebuilding it. All tool state
-// (calculator display, stopwatch, saved note) lives in globals, so a rebuild
-// preserves it while picking up the new accent / AMOLED colors.
-void refreshUtilityTheme() {
+// Rebuild the current tool after a theme or Notes mode change. Calculator and
+// stopwatch state live in globals; Notes preserves the draft/selection and does
+// not silently save or drop dirty text when the palette changes.
+void rebuildUtilityPage() {
   if (!utilityPage || utilityActive > 2) return;
-  if (utilityActive == 1) saveUtilityNote();
+  if (utilityActive == 1 && utilityNote)
+    utilityNoteDraft = lv_textarea_get_text(utilityNote);
   const uint8_t app = utilityActive;
   lv_obj_del(utilityPage);
   utilityPage = utilityDisplay = utilityNote = utilityStatus = nullptr;
+  utilityNotePanel = utilityNoteKeyboard = nullptr;
   utilityActive = 255;
   openUtilityApp(app);
+}
+
+void refreshUtilityTheme() {
+  rebuildUtilityPage();
 }

@@ -256,7 +256,10 @@ void scanAudiobooks() {
     setAudiobookStatus(STR_SD_BUSY);
     return;
   }
-  if (!mountMusicSd()) return;
+  if (!mountMusicSd()) {
+    setAudiobookStatus(STR_SD_UNAVAILABLE);
+    return;
+  }
 
   if (!SD.exists("/audiobooks")) {
     setAudiobookStatus(STR_AUDIOBOOK_FOLDER_HINT);
@@ -326,8 +329,15 @@ void stopAudiobookPlayback() {
 }
 
 bool startAudiobook(uint8_t index, bool resume) {
-  if (!audiobookTrackCount || index >= audiobookTrackCount ||
-      !weatherWallpaperSdReadyForOtherUsers() || !mountMusicSd()) return false;
+  if (!audiobookTrackCount || index >= audiobookTrackCount) return false;
+  if (!weatherWallpaperSdReadyForOtherUsers()) {
+    setAudiobookStatus(STR_SD_BUSY);
+    return false;
+  }
+  if (!mountMusicSd()) {
+    setAudiobookStatus(STR_SD_UNAVAILABLE);
+    return false;
+  }
   stopMusicPlayback();
   stopAudiobookPlayback();
   stopRadioPlayback();
