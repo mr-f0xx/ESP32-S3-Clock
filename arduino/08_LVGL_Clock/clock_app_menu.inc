@@ -41,7 +41,6 @@ constexpr uint32_t SPECTRUM_TILE_COLORS[APP_MENU_TILE_CAPACITY] = {
   0xFFE05C, 0x8CE85A, 0xFF9656, 0xE8A4FF
 };
 uint8_t appMenuTileCount = 0;
-lv_obj_t *utilityTileLabels[3] = {};
 
 enum AppMenuItem : uint8_t {
   APP_MENU_CLOCK = 0,
@@ -861,7 +860,7 @@ void createPowerOffSelector() {
 // every accent to one hue; amber uses the phosphor trace; black keeps white.
 lv_color_t appTileIconColor(uint32_t accent) {
   if (themeIsAmber()) return lv_color_hex(CRT_AMBER);
-  if (themeIsSpectrum()) return lv_color_hex(accent);
+  if (themePerTileColors()) return lv_color_hex(accent);
   if (themeIsNeon()) return lv_color_hex(themeAccent(accent));
   return lv_color_white();
 }
@@ -877,6 +876,17 @@ void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
     lv_obj_set_style_shadow_spread(button, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_color(button, lv_color_hex(color), LV_PART_MAIN);
     lv_obj_set_style_shadow_opa(button, LV_OPA_40, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(color), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
+  } else if (themeIsGlow()) {
+    // HiBy-style: graphite tile with a subtle edge and no tile halo — the neon
+    // glow lives on the icon itself (applied in the icon section below).
+    lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x262A33)), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(button, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, lv_color_hex(themeBorder(0x3A404C)), LV_PART_MAIN);
+    lv_obj_set_style_border_opa(button, LV_OPA_40, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(button, lv_color_hex(color), LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(button, LV_OPA_30, LV_PART_MAIN | LV_STATE_PRESSED);
   } else if (themeIsAmber()) {
@@ -929,6 +939,13 @@ void applyAppTileTheme(lv_obj_t *button, uint32_t color) {
     // colors. Applying both is safe for either representation.
     lv_obj_set_style_img_recolor(icon, iconColor, 0);
     setTablerIconColor(icon, iconColor);
+    // Icon Glow theme: a soft neon halo hugging the icon, like the reference
+    // launcher. Other themes set width 0 so switching away removes the glow.
+    lv_obj_set_style_radius(icon, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_shadow_width(icon, themeIsGlow() ? 22 : 0, 0);
+    lv_obj_set_style_shadow_spread(icon, 2, 0);
+    lv_obj_set_style_shadow_color(icon, iconColor, 0);
+    lv_obj_set_style_shadow_opa(icon, LV_OPA_60, 0);
   }
 }
 
@@ -942,7 +959,7 @@ lv_obj_t *createAppTile(lv_obj_t *parent, AppMenuItem item, uint8_t slot,
                  APP_MENU_TILE_TOP + row * (APP_MENU_TILE_SIZE + APP_MENU_TILE_GAP_Y));
   lv_obj_set_size(button, APP_MENU_TILE_SIZE, APP_MENU_TILE_SIZE);
   lv_obj_set_style_radius(button, 38, LV_PART_MAIN);
-  applyAppTileTheme(button, themeIsSpectrum() && appMenuTileCount < APP_MENU_TILE_CAPACITY
+  applyAppTileTheme(button, themePerTileColors() && appMenuTileCount < APP_MENU_TILE_CAPACITY
                             ? SPECTRUM_TILE_COLORS[appMenuTileCount] : color);
   lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(button, LV_OBJ_FLAG_GESTURE_BUBBLE);
@@ -1114,23 +1131,15 @@ void createAppMenu() {
   createTablerIcon(timerButton, TABLER_ICON_TIMER, 80,
     appTileIconColor(UI_ACCENT_AMBER));
 
-  const char *utilityNames[] = {tr(STR_CALCULATOR), tr(STR_NOTES), tr(STR_STOPWATCH)};
   const AppMenuItem utilityItems[] = {APP_MENU_CALCULATOR, APP_MENU_NOTES, APP_MENU_STOPWATCH};
   const uint32_t utilityColors[] = {UI_ACCENT_BLUE, UI_ACCENT_MINT, UI_ACCENT_ROSE};
   const TablerIconKind utilityIcons[] = {TABLER_ICON_CALCULATOR, TABLER_ICON_NOTES,
                                          TABLER_ICON_STOPWATCH};
   for (uint8_t i = 0; i < 3; ++i) {
     lv_obj_t *tile = createAppTile(appMenuPages[3], utilityItems[i], i + 1, utilityColors[i]);
-    // Icon must be child 0 so applyAppTileTheme() recolors it on theme change.
-    lv_obj_t *icon = createTablerIcon(tile, utilityIcons[i], 64,
-                                      appTileIconColor(utilityColors[i]));
-    lv_obj_align(icon, LV_ALIGN_CENTER, 0, -20);
-    lv_obj_t *label = lv_label_create(tile);
-    utilityTileLabels[i] = label;
-    lv_label_set_text(label, utilityNames[i]);
-    lv_obj_set_style_text_font(label, &lv_font_ui_16, 0);
-    lv_obj_set_style_text_color(label, appTileIconColor(utilityColors[i]), 0);
-    lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -16);
+    // Icon-only tile (no title), matching the other launcher tiles. The icon is
+    // child 0 so applyAppTileTheme() recolors / glows it on theme change.
+    createTablerIcon(tile, utilityIcons[i], 80, appTileIconColor(utilityColors[i]));
   }
 
   for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
@@ -1166,15 +1175,7 @@ void refreshAppMenuTheme() {
   lv_obj_set_style_bg_color(appMenu, themePageBackground(), 0);
   for (uint8_t i = 0; i < appMenuTileCount; ++i)
     applyAppTileTheme(appMenuTileButtons[i],
-                      themeIsSpectrum() ? SPECTRUM_TILE_COLORS[i] : appMenuTileColors[i]);
-  const UiStr utilityIds[] = {STR_CALCULATOR, STR_NOTES, STR_STOPWATCH};
-  const uint32_t utilityColors[] = {UI_ACCENT_BLUE, UI_ACCENT_MINT, UI_ACCENT_ROSE};
-  for (uint8_t i = 0; i < 3; ++i) {
-    if (!utilityTileLabels[i]) continue;
-    lv_label_set_text(utilityTileLabels[i], tr(utilityIds[i]));
-    lv_obj_set_style_text_color(utilityTileLabels[i], appTileIconColor(themeIsSpectrum() ? SPECTRUM_TILE_COLORS[13 + i] : utilityColors[i]), 0);
-    lv_obj_align(utilityTileLabels[i], LV_ALIGN_BOTTOM_MID, 0, -16);
-  }
+                      themePerTileColors() ? SPECTRUM_TILE_COLORS[i] : appMenuTileColors[i]);
   for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {
     if (appMenuPageDots[i])
       lv_obj_set_style_bg_color(appMenuPageDots[i], themeText(), 0);
