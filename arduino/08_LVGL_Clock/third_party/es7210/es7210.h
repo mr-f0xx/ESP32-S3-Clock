@@ -13,6 +13,7 @@
 
 #include <stdint.h>
 #include "esp_err.h"
+#include "driver/i2c.h"
 #include "esp32-hal-i2c.h"
 
 /**
