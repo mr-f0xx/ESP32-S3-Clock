@@ -10,9 +10,14 @@
 // Authenticated, versioned vault container. The entire header is AAD; ciphertext
 // includes a 16-byte GCM tag. No plaintext, PIN, or derived key is persisted.
 namespace VaultCrypto {
-constexpr size_t SALT_BYTES = 16, NONCE_BYTES = 12, KEY_BYTES = 32,
-                 TAG_BYTES = 16, HEADER_BYTES = 4 + 1 + 4 + SALT_BYTES + NONCE_BYTES,
-                 MAX_PLAINTEXT = 49152, MAX_FILE = HEADER_BYTES + MAX_PLAINTEXT + TAG_BYTES;
+constexpr size_t SALT_BYTES = 16;
+constexpr size_t NONCE_BYTES = 12;
+constexpr size_t KEY_BYTES = 32;
+constexpr size_t TAG_BYTES = 16;
+constexpr size_t HEADER_BYTES = 37;
+constexpr size_t MAX_PLAINTEXT = 49152;
+constexpr size_t MAX_FILE = HEADER_BYTES + MAX_PLAINTEXT + TAG_BYTES;
+static_assert(HEADER_BYTES == 4 + 1 + 4 + SALT_BYTES + NONCE_BYTES, "vault header layout");
 constexpr uint32_t KDF_ITERATIONS = 600000;
 inline void wipe(void *p, size_t n) { mbedtls_platform_zeroize(p, n); }
 inline void put32(uint8_t *p, uint32_t v) { for (uint8_t i = 0; i < 4; ++i) p[i] = v >> (8 * i); }

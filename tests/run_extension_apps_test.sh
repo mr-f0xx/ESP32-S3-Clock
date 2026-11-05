@@ -24,7 +24,8 @@ for hook in ['processExtensionTransitions();','serviceExtensionApps();']:
 assert 'suspendExtensionAppsForLowPower();' in power
 assert 'lowPowerRestoreExtension = activeExtensionApp();' in power
 assert 'refreshExtensionThemes();' in theme
-assert 'if (extensionAppVisible()) return;' in control
+assert 'if (extensionAppVisible() && !controlPanelVisible) return;' in control
+assert 'extensionPageGestureEvent' in ext and 'stopMusicPlayback();' in ext
 # Constructors are reached only through the lazy dispatch, never createAppMenu.
 create_menu = menu.split('void createAppMenu() {',1)[1].split('void refreshAppMenuTheme()',1)[0]
 for name in ['createSubsonicPage','createRecorderPage','createGameboyPage','createWifiHudPage','createSamplerPage','createVaultPage']:

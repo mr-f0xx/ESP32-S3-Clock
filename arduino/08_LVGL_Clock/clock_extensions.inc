@@ -56,6 +56,7 @@ lv_obj_t *extButton(lv_obj_t *parent, const char *text, int x, int y,
   lv_obj_set_style_border_width(button, 0, 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_70, LV_STATE_PRESSED);
   lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(button, LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, reinterpret_cast<void *>(data));
   lv_obj_t *label = lv_label_create(button);
   lv_label_set_text(label, text);
@@ -76,6 +77,22 @@ lv_obj_t *extField(lv_obj_t *parent, const char *placeholder, int x, int y,
   styleUtilityNote(field, lv_color_hex(extensionAccent));
   return field;
 }
+void extensionPageGestureEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_GESTURE || lowPowerMode) return;
+  const uint8_t app = activeExtensionApp();
+  if (app == EXT_SAMPLER || app == EXT_GAMEBOY) return; // expression lanes / controls
+  lv_indev_t *input = lv_indev_get_act();
+  if (!input) return;
+  const lv_dir_t direction = logicalGestureDirection(input);
+  if (!controlPanelVisible && direction == LV_DIR_BOTTOM &&
+      gestureStartY >= 0 && gestureStartY <= CONTROL_PANEL_GESTURE_EDGE) {
+    markUserActivity(); showControlPanel(true);
+  } else if (controlPanelVisible && direction == LV_DIR_TOP &&
+             gestureStartY >= SCREEN_HEIGHT - CONTROL_PANEL_GESTURE_EDGE) {
+    hideControlPanel(true);
+  }
+  gestureStartX = gestureStartY = -1;
+}
 void extBackEvent(lv_event_t *event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
   const uint8_t app = activeExtensionApp();
@@ -95,6 +112,7 @@ lv_obj_t *extPage(uint8_t app, const char *title, uint32_t accent) {
   lv_obj_set_style_border_width(page, 0, 0);
   lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
   lv_obj_add_flag(page, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(page, extensionPageGestureEvent, LV_EVENT_GESTURE, nullptr);
   createAppBackButton(page, extBackEvent, accent);
   lv_obj_t *label = extLabel(page, title, 96, 34, 360, 28);
   lv_obj_set_height(label, 40);
@@ -182,6 +200,10 @@ void processExtensionTransitions() {
       utilityActive = 255;
     }
     stopExtensionAudio();
+    stopMusicPlayback();
+    stopAudiobookPlayback();
+    stopRadioPlayback();
+    if (videoAudioActive) stopVideoAudioSourceKeepingOutput();
     closeOtherExtensionApps(i);
     beginScreenFade(activeBrightness);
     hideAppMenu(false);

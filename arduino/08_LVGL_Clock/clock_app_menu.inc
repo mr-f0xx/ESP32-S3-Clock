@@ -258,7 +258,7 @@ void showAppMenu(bool fade) {
       audiobookPageShowRequested || weatherPageVisible ||
       weatherPageShowRequested || weatherInfoPageVisible ||
       weatherInfoPageShowRequested || worldClockPageVisible ||
-      photoFramePageVisible || timerPageVisible) return;
+      photoFramePageVisible || timerPageVisible || extensionAppVisible()) return;
   if (fade) {
     appMenuHideRequested = false;
     appMenuShowRequested = true;

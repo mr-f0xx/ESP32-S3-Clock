@@ -445,6 +445,7 @@ void refreshExtensionThemes();
 void suspendExtensionAppsForLowPower();
 void stopExtensionAudio();
 bool extensionAudioBusy();
+void vaultLock();
 
 bool connectSavedWifi(bool ntpOnly = false);
 void startTemporaryNtpWifi();
