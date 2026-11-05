@@ -43,6 +43,8 @@ vault = (root/'clock_vault.inc').read_text()
 crypto = (root/'src/vault_crypto.h').read_text()
 assert 'mbedtls_gcm_auth_decrypt' in crypto and 'mbedtls_pkcs5_pbkdf2_hmac' in crypto
 assert 'VAULT_KDF_ITERATIONS = 600000' in crypto
+assert 'VaultCrypto::MAX_FILE' not in (root / 'clock_vault.inc').read_text()
+assert 'mbedtls_pkcs5_pbkdf2_hmac_ext' in crypto
 assert 'bootloader_fill_random' in vault and 'vaultTypeConfirmed' in vault
 assert 'Confirm USB typing' in vault and 'vaultStopTyping' in vault
 assert 'vaultLock();' in ext and 'VaultCrypto::wipe(vaultRecords' in vault

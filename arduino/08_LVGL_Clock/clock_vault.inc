@@ -20,7 +20,7 @@ VaultRecord vaultRecords[VAULT_RECORD_LIMIT];
 uint8_t vaultCount = 0, vaultSelected = 0, vaultListPage = 0, vaultEditIndex = 255;
 bool vaultUnlocked = false, vaultExists = false, vaultFrenchLayout = false, vaultKeyboardReady = false;
 void vaultUpdateRows();
-uint8_t vaultKey[VaultCrypto::KEY_BYTES] = {}, vaultSalt[VaultCrypto::SALT_BYTES] = {};
+uint8_t vaultKey[VaultCrypto::VAULT_KEY_BYTES] = {}, vaultSalt[VaultCrypto::VAULT_SALT_BYTES] = {};
 uint32_t vaultLockUntil = 0;
 lv_obj_t *vaultLockPanel = nullptr, *vaultListPanel = nullptr, *vaultDetailPanel = nullptr,
           *vaultEditPanel = nullptr, *vaultConfirmPanel = nullptr, *vaultKeyboard = nullptr,
@@ -75,12 +75,12 @@ void vaultRandom(uint8_t *bytes, size_t length) {
 bool vaultWriteEncrypted(const uint8_t *plain, size_t length) {
   if (!vaultUnlocked || !extSdReady()) return false;
   if (!SD.exists("/vault")) SD.mkdir("/vault");
-  uint8_t nonce[VaultCrypto::NONCE_BYTES]; vaultRandom(nonce, sizeof(nonce));
-  uint8_t *container = static_cast<uint8_t *>(heap_caps_malloc(VaultCrypto::MAX_FILE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  uint8_t nonce[VaultCrypto::VAULT_NONCE_BYTES]; vaultRandom(nonce, sizeof(nonce));
+  uint8_t *container = static_cast<uint8_t *>(heap_caps_malloc(VaultCrypto::VAULT_MAX_FILE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!container) return false;
   size_t containerLength = 0;
   const bool sealed = VaultCrypto::seal(vaultKey, vaultSalt, nonce, plain, length,
-                                        container, VaultCrypto::MAX_FILE, containerLength);
+                                        container, VaultCrypto::VAULT_MAX_FILE, containerLength);
   VaultCrypto::wipe(nonce, sizeof(nonce));
   bool written = false;
   if (sealed) {
@@ -97,7 +97,7 @@ bool vaultWriteEncrypted(const uint8_t *plain, size_t length) {
     }
     if (!written) SD.remove("/vault/passwords.new");
   }
-  VaultCrypto::wipe(container, VaultCrypto::MAX_FILE); free(container);
+  VaultCrypto::wipe(container, VaultCrypto::VAULT_MAX_FILE); free(container);
   return written;
 }
 bool vaultSaveRecords() {
@@ -109,11 +109,11 @@ bool vaultSaveRecords() {
     record["title"] = vaultRecords[i].title; record["username"] = vaultRecords[i].username;
     record["password"] = vaultRecords[i].password; record["note"] = vaultRecords[i].note;
   }
-  uint8_t *plain = static_cast<uint8_t *>(heap_caps_malloc(VaultCrypto::MAX_PLAINTEXT, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  uint8_t *plain = static_cast<uint8_t *>(heap_caps_malloc(VaultCrypto::VAULT_MAX_PLAINTEXT, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!plain) return false;
-  const size_t length = serializeJson(document, plain, VaultCrypto::MAX_PLAINTEXT);
-  const bool saved = length > 0 && length < VaultCrypto::MAX_PLAINTEXT && vaultWriteEncrypted(plain, length);
-  VaultCrypto::wipe(plain, VaultCrypto::MAX_PLAINTEXT); free(plain);
+  const size_t length = serializeJson(document, plain, VaultCrypto::VAULT_MAX_PLAINTEXT);
+  const bool saved = length > 0 && length < VaultCrypto::VAULT_MAX_PLAINTEXT && vaultWriteEncrypted(plain, length);
+  VaultCrypto::wipe(plain, VaultCrypto::VAULT_MAX_PLAINTEXT); free(plain);
   return saved;
 }
 bool vaultUnlockOrCreate(bool create) {
@@ -127,13 +127,13 @@ bool vaultUnlockOrCreate(bool create) {
   if (!extSdReady()) { vaultStatusText("Insert a TF card; vault is never stored in internal flash"); return false; }
   vaultStatusText(create ? "Creating authenticated vault..." : "Deriving key and verifying vault...");
   lv_refr_now(nullptr);
-  uint8_t *plain = static_cast<uint8_t *>(heap_caps_calloc(VaultCrypto::MAX_PLAINTEXT + 1, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  uint8_t *plain = static_cast<uint8_t *>(heap_caps_calloc(VaultCrypto::VAULT_MAX_PLAINTEXT + 1, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!plain) { vaultStatusText("Not enough PSRAM"); return false; }
   bool success = false;
   if (create) {
     if (SD.exists("/vault/passwords.bin")) { free(plain); vaultExists = true; vaultStatusText("Vault already exists - unlock it instead"); return false; }
     vaultRandom(vaultSalt, sizeof(vaultSalt));
-    success = VaultCrypto::deriveKey(pin, strlen(pin), vaultSalt, VaultCrypto::KDF_ITERATIONS, vaultKey);
+    success = VaultCrypto::deriveKey(pin, strlen(pin), vaultSalt, VaultCrypto::VAULT_KDF_ITERATIONS, vaultKey);
     if (success) {
       const char empty[] = "{\"version\":1,\"records\":[]}";
       memcpy(plain, empty, sizeof(empty) - 1);
@@ -144,12 +144,12 @@ bool vaultUnlockOrCreate(bool create) {
   } else {
     File file = SD.open("/vault/passwords.bin", FILE_READ);
     if (!file) { if (SD.exists("/vault/passwords.bak")) file = SD.open("/vault/passwords.bak", FILE_READ); }
-    if (file && file.size() <= VaultCrypto::MAX_FILE) {
+    if (file && file.size() <= VaultCrypto::VAULT_MAX_FILE) {
       uint8_t *container = static_cast<uint8_t *>(heap_caps_malloc(file.size(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
       if (container && file.read(container, file.size()) == file.size()) {
         size_t plainLength = 0;
         success = VaultCrypto::open(pin, strlen(pin), container, file.size(), plain,
-          VaultCrypto::MAX_PLAINTEXT, plainLength, vaultKey, vaultSalt);
+          VaultCrypto::VAULT_MAX_PLAINTEXT, plainLength, vaultKey, vaultSalt);
         if (success) {
           plain[plainLength] = 0;
           JsonDocument document;
@@ -171,7 +171,7 @@ bool vaultUnlockOrCreate(bool create) {
     }
     if (file) file.close();
   }
-  VaultCrypto::wipe(plain, VaultCrypto::MAX_PLAINTEXT + 1); free(plain);
+  VaultCrypto::wipe(plain, VaultCrypto::VAULT_MAX_PLAINTEXT + 1); free(plain);
   vaultClearField(vaultPinField); vaultHideKeyboard();
   if (!success) {
     VaultCrypto::wipe(vaultKey, sizeof(vaultKey));
