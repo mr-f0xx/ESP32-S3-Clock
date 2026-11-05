@@ -434,6 +434,18 @@ lv_disp_rot_t displaySoftwareRotation = LV_DISP_ROT_NONE;
 esp_timer_handle_t lvglTimer = nullptr;
 SemaphoreHandle_t displayBusMutex = nullptr;
 
+uint8_t lowPowerRestoreExtension = 255;
+bool extensionAppVisible();
+uint8_t activeExtensionApp();
+void requestExtensionApp(uint8_t app);
+void cancelExtensionLaunches();
+void processExtensionTransitions();
+void serviceExtensionApps();
+void refreshExtensionThemes();
+void suspendExtensionAppsForLowPower();
+void stopExtensionAudio();
+bool extensionAudioBusy();
+
 bool connectSavedWifi(bool ntpOnly = false);
 void startTemporaryNtpWifi();
 void stopTemporaryNtpWifi();
@@ -605,6 +617,7 @@ void serviceAlbumAutoSwitch();
 #include "clock_music.inc"
 #include "clock_audiobook.inc"
 #include "clock_radio.inc"
+#include "clock_extensions.inc"
 #include "clock_world.inc"
 #include "clock_photo.inc"
 #include "clock_timer.inc"
@@ -633,6 +646,7 @@ void setup() {
   }
   Serial.println("LittleFS ready");
   loadSettings();
+  loadSubsonicSettings();
   initializeImageHistory();
   initializeImageKeys();
   loadBackgroundImage();
@@ -687,6 +701,7 @@ void loop() {
   processMusicPageTransition();
   processAudiobookPageTransition();
   processRadioPageTransition();
+  processExtensionTransitions();
   processWeatherWallpaperTransition();
   processWeatherInfoPageTransition();
   processCalendarPageActions();
@@ -697,6 +712,7 @@ void loop() {
   serviceMusicPlayback();
   serviceAudiobookPlayback();
   serviceRadioPlayback();
+  serviceExtensionApps();
   serviceWeatherWallpaper();
   serviceWeatherInfoPage();
   serviceAlarms();
@@ -804,11 +820,13 @@ void loop() {
   processMusicPageTransition();
   processAudiobookPageTransition();
   processRadioPageTransition();
+  processExtensionTransitions();
   processWeatherWallpaperTransition();
   processWeatherInfoPageTransition();
   serviceMusicPlayback();
   serviceAudiobookPlayback();
   serviceRadioPlayback();
+  serviceExtensionApps();
   // The standalone 09 player does not run LVGL for every decoded frame. Keep
   // its 10 ms UI cadence in weather mode so the main loop can immediately
   // begin the next JPEG; all other applications retain the original cadence.
@@ -825,8 +843,9 @@ void loop() {
   serviceMusicPlayback();
   serviceAudiobookPlayback();
   serviceRadioPlayback();
+  serviceExtensionApps();
   checkAutoSleep();
   if (weatherPageVisible) taskYIELD();
-  else if (radioStreamActive && !radioPaused && !radioReconnectPending) delay(1);
+  else if ((radioStreamActive && !radioPaused && !radioReconnectPending) || extensionAudioBusy()) delay(1);
   else delay(5);
 }

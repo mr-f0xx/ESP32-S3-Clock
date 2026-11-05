@@ -42,6 +42,12 @@ ICONS = {
     "power": 120,
     "headphones": 120,
     "cloud": 120,
+    "server-2": 120,
+    "microphone": 120,
+    "device-gamepad-2": 120,
+    "radar-2": 120,
+    "piano": 120,
+    "lock-password": 120,
     "x": 32,
 }
 

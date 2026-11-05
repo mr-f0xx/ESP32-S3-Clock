@@ -36,7 +36,9 @@ uint32_t powerOffChoiceSuppressedUntil = 0;
 // rebuilding the menu. The base color is the per-app accent used in the black
 // theme; amber uses a translucent CRT-phosphor tint and Icon Glow uses a
 // translucent tint of each tile's own color.
-constexpr uint8_t APP_MENU_TILE_CAPACITY = 16;
+constexpr uint8_t APP_MENU_TILE_CAPACITY = 22;
+constexpr uint8_t EXTENSION_APP_COUNT = 6;
+constexpr uint8_t APP_MENU_PAGE_COUNT = 6;
 lv_obj_t *appMenuTileButtons[APP_MENU_TILE_CAPACITY] = {};
 uint32_t appMenuTileColors[APP_MENU_TILE_CAPACITY] = {};
 // Indexed by launcher tile creation order, including the three utility apps.
@@ -46,7 +48,8 @@ constexpr uint32_t SPECTRUM_TILE_COLORS[APP_MENU_TILE_CAPACITY] = {
   0xFFB020, 0xFF5C7A, 0xA8B6FF, 0x46A8FF,
   0x3FE0D0, 0xFF558F, 0xB57AFF, 0x53F0AA,
   0x43E8FF, 0xFF6551, 0x6B9CFF, 0xE96AFF,
-  0xFFE05C, 0x8CE85A, 0xFF9656, 0xE8A4FF
+  0xFFE05C, 0x8CE85A, 0xFF9656, 0xE8A4FF,
+  0x69D2FF, 0xFF7B9C, 0x9DE879, 0x53E0D0, 0xFFBD66, 0xC5A3FF
 };
 uint8_t appMenuTileCount = 0;
 
@@ -66,7 +69,13 @@ enum AppMenuItem : uint8_t {
   APP_MENU_TIMER,
   APP_MENU_CALCULATOR,
   APP_MENU_NOTES,
-  APP_MENU_STOPWATCH
+  APP_MENU_STOPWATCH,
+  APP_MENU_SUBSONIC,
+  APP_MENU_RECORDER,
+  APP_MENU_GAMEBOY,
+  APP_MENU_WIFI_HUD,
+  APP_MENU_SAMPLER,
+  APP_MENU_VAULT
 };
 
 void cancelPendingAppLaunches() {
@@ -79,6 +88,7 @@ void cancelPendingAppLaunches() {
   weatherPageShowRequested = false;
   weatherInfoPageShowRequested = false;
   appMenuHideRequested = false;
+  cancelExtensionLaunches();
 }
 
 void consumeCurrentTouchRelease() {
@@ -525,7 +535,7 @@ void appMenuItemEvent(lv_event_t *event) {
       static_cast<int32_t>(now - appMenuClickSuppressedUntil) < 0) return;
   const AppMenuItem item = static_cast<AppMenuItem>(
     reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
-  if (item > APP_MENU_STOPWATCH) return;
+  if (item >= APP_MENU_SUBSONIC + EXTENSION_APP_COUNT) return;
   // Guard every normal click too, not only a preceding swipe. CST9217 can
   // occasionally report another press after release, especially near a
   // rotation; without this lock the second sample could launch another tile.
@@ -565,6 +575,8 @@ void appMenuItemEvent(lv_event_t *event) {
     showTimerPage(true);
   } else if (item >= APP_MENU_CALCULATOR && item <= APP_MENU_STOPWATCH) {
     openUtilityApp(static_cast<uint8_t>(item - APP_MENU_CALCULATOR));
+  } else if (item >= APP_MENU_SUBSONIC) {
+    requestExtensionApp(item - APP_MENU_SUBSONIC);
   } else {
     // The Settings tile exposes the same configuration page served over the
     // normal Wi-Fi connection, but through a predictable local hotspot.
@@ -1221,6 +1233,16 @@ void createAppMenu() {
     // child 0 so applyAppTileTheme() recolors it on theme change.
     createTablerIcon(tile, utilityIcons[i], APP_MENU_ICON_SIZE,
       appTileIconColor(utilityColors[i]));
+  }
+
+  const lv_img_dsc_t *extensionIcons[] = {&tabler_server_2, &tabler_microphone,
+    &tabler_device_gamepad_2, &tabler_radar_2, &tabler_piano, &tabler_lock_password};
+  const uint32_t extensionColors[] = {0x69D2FF, 0xFF7B9C, 0x9DE879,
+                                      0x53E0D0, 0xFFBD66, 0xC5A3FF};
+  for (uint8_t i = 0; i < EXTENSION_APP_COUNT; ++i) {
+    lv_obj_t *tile = createAppTile(appMenuPages[4 + i / 4],
+      static_cast<AppMenuItem>(APP_MENU_SUBSONIC + i), i % 4, extensionColors[i]);
+    createTablerAppIcon(tile, extensionIcons[i]);
   }
 
   for (uint8_t i = 0; i < APP_MENU_PAGE_COUNT; ++i) {

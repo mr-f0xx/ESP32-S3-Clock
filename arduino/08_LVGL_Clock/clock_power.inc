@@ -127,6 +127,7 @@ void resetLowPowerInputState() {
 
 void captureLowPowerRestoreLocation() {
   lowPowerRestoreControlPanel = controlPanelVisible;
+  lowPowerRestoreExtension = activeExtensionApp();
   if (weatherInfoPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::WeatherInfo;
   else if (weatherPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Weather;
   else if (audiobookPageVisible) lowPowerRestoreApp = LowPowerRestoreApp::Audiobook;
@@ -147,6 +148,11 @@ void restoreLowPowerLocation() {
   controlPanelMusicWasPlaying = false;
   controlPanelSuspendedAudiobook = false;
   controlPanelAudiobookWasPlaying = false;
+  if (lowPowerRestoreExtension != 255) {
+    requestExtensionApp(lowPowerRestoreExtension);
+    lowPowerRestoreExtension = 255;
+    return;
+  }
   switch (lowPowerRestoreApp) {
     case LowPowerRestoreApp::AppMenu:
       updateAppMenuPageVisibility();
@@ -238,6 +244,7 @@ void enterLowPowerClockMode() {
   hideMusicPage(false, false);
   hideAudiobookPage(false, false);
   hideRadioPage(false, false);
+  suspendExtensionAppsForLowPower();
   suspendAudiobookForLowPower();
   suspendRadioForLowPower();
   suspendMusicForLowPower(weatherSdIdle);

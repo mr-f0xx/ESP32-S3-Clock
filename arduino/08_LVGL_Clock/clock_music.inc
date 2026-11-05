@@ -888,6 +888,7 @@ void startAlarmSound() {
   stopAudiobookPlayback();
   stopMusicPlayback();
   stopRadioPlayback();
+  stopExtensionAudio();
   videoAudioRestartRequested = interruptedVideoAudio;
   if (!initializeMusicCodec() || !musicOutput) {
     Serial.println("Alarm: audio codec unavailable");

@@ -136,6 +136,8 @@ void processControlPanelTransition() {
 uint32_t appMenuClickSuppressedUntil = 0;
 
 void mainUiGestureEvent(lv_event_t *event) {
+  // New apps own their edge gestures (sampler pitch/filter, emulator controls).
+  if (extensionAppVisible()) return;
   if (lv_event_get_code(event) != LV_EVENT_GESTURE || lowPowerMode) return;
   lv_indev_t *input = lv_indev_get_act();
   if (!input || timerAlertVisible) return;
