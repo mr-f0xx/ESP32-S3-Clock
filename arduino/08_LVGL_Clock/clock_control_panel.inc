@@ -11,20 +11,9 @@ void resumeWeatherWallpaperAfterControlPanel();
 uint32_t weatherWallpaperDisplayedSequence();
 bool weatherWallpaperPlaybackReady();
 
-constexpr int16_t CONTROL_PANEL_SIZE = 480;
-constexpr int16_t CONTROL_PANEL_BUTTON_X = 43;
-constexpr int16_t CONTROL_PANEL_BUTTON_WIDTH = 130;
-constexpr int16_t CONTROL_PANEL_BUTTON_HEIGHT = 130;
-constexpr int16_t CONTROL_PANEL_BUTTON_RADIUS = LV_RADIUS_CIRCLE;
-constexpr int16_t CONTROL_PANEL_WIFI_Y = 80;
-constexpr int16_t CONTROL_PANEL_BLUETOOTH_Y = 288;
-// Start below the top pill row (pills occupy y 16..60) with enough clearance
-// for the slider knob at max value, so the knob can never cover a pill.
-constexpr int16_t CONTROL_PANEL_SLIDER_Y = 96;
-constexpr int16_t CONTROL_PANEL_SLIDER_WIDTH = 30;
-constexpr int16_t CONTROL_PANEL_SLIDER_HEIGHT = 290;
-constexpr int16_t CONTROL_PANEL_BRIGHTNESS_X = 240;
-constexpr int16_t CONTROL_PANEL_VOLUME_X = 371;
+// All rectangles come from ClockLayout::control(SCREEN_WIDTH, SCREEN_HEIGHT).
+// Settings, connectivity and horizontal sliders occupy separate bands; slider
+// knob overhang is included in the native layout tests.
 bool controlPanelSuspendedWeather = false;
 bool controlPanelSuspendedMusic = false;
 bool controlPanelMusicWasPlaying = false;
@@ -294,13 +283,14 @@ bool updateBatteryPanelStatus() {
   uint32_t colorValue;
   if (!connected) {
     percentText = tr(STR_NO_BAT);
-    colorValue = themeIsAmber() ? CRT_AMBER_DIM : 0x9299A3;
+    colorValue = themeIsAmber() ? CRT_AMBER_DIM : 0x9AA3B2;
   } else {
     percentText = String(percent) + "%";
     if (themeIsAmber()) {
       colorValue = percent <= 10 ? CRT_AMBER_DIM : CRT_AMBER;
     } else {
-      colorValue = charging ? 0x45D483 : (percent <= 10 ? 0xFF5B62 : 0xFFFFFF);
+      colorValue = charging ? themeAccent(UI_ACCENT_MINT)
+                            : (percent <= 10 ? themeAccent(UI_ACCENT_ROSE) : 0xFFFFFF);
     }
   }
 
@@ -476,6 +466,7 @@ void brightnessControlEvent(lv_event_t *event) {
     // CO5300 brightness is a short display command, not an I2C transaction;
     // apply it immediately so the slider remains visually and physically live.
     if (!lowPowerMode) gfx->setBrightness(activeBrightness);
+    if (controlBrightnessValue) lv_label_set_text_fmt(controlBrightnessValue, "%u%%", brightnessHardwareToPercent(activeBrightness));
   } else if (code == LV_EVENT_RELEASED) {
     brightnessSaveRequested = true;
     controlPanelActionDueAt = millis() + 20;
@@ -491,6 +482,7 @@ void volumeControlEvent(lv_event_t *event) {
     // ES8311 and touch share the I2C bus. Defer codec writes until the slider
     // pauses instead of writing on every movement sample.
     controlPanelActionDueAt = millis() + 80;
+    if (controlVolumeValue) lv_label_set_text_fmt(controlVolumeValue, "%u%%", audioVolume);
   } else if (code == LV_EVENT_RELEASED) {
     volumeApplyRequested = true;
     volumeSaveRequested = true;
@@ -498,35 +490,36 @@ void volumeControlEvent(lv_event_t *event) {
   }
 }
 
-lv_obj_t *createControlButton(lv_obj_t *parent, int16_t y,
+void setControlRect(lv_obj_t *object, const ClockLayout::Rect &r) {
+  lv_obj_set_pos(object, r.x, r.y);
+  lv_obj_set_size(object, r.w, r.h);
+}
+
+void placeControlIcon(lv_obj_t *icon, const ClockLayout::Rect &r) {
+  lv_obj_update_layout(icon);
+  lv_obj_set_pos(icon, r.x + (r.w - lv_obj_get_width(icon)) / 2,
+               r.y + (r.h - lv_obj_get_height(icon)) / 2);
+}
+
+lv_obj_t *createControlButton(const ClockLayout::Rect &r,
                                const lv_img_dsc_t *iconImage,
-                               lv_event_cb_t callback, lv_obj_t **icon,
-                               lv_obj_t **status) {
-  lv_obj_t *button = lv_btn_create(parent);
-  lv_obj_set_pos(button, CONTROL_PANEL_BUTTON_X, y);
-  lv_obj_set_size(button, CONTROL_PANEL_BUTTON_WIDTH, CONTROL_PANEL_BUTTON_HEIGHT);
-  lv_obj_set_style_radius(button, CONTROL_PANEL_BUTTON_RADIUS, 0);
+                               lv_event_cb_t callback, lv_obj_t **icon) {
+  lv_obj_t *button = lv_btn_create(controlPanel);
+  setControlRect(button, r);
+  lv_obj_set_style_radius(button, ClockLayout::scale(22, SCREEN_WIDTH), 0);
+  lv_obj_set_style_border_width(button, 1, 0);
+  lv_obj_set_style_shadow_width(button, 0, 0);
+  lv_obj_set_style_pad_all(button, 0, 0);
+  lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
-
-  // These alpha maps are generated directly from Tabler's official SVGs.
-  // Keep their native 56 px size: no hand-drawn approximation and no image
-  // transform path that can disappear on the rotated display.
+  // Native Alpha-8 artwork; never use the image transform path.
   *icon = createOfficialTablerIcon(button, iconImage);
-
-  *status = lv_label_create(parent);
-  lv_obj_set_size(*status, 185, 28);
-  lv_label_set_long_mode(*status, LV_LABEL_LONG_DOT);
-  lv_obj_set_style_text_font(*status, &lv_font_ui_20, 0);
-  lv_obj_set_style_text_align(*status, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_bg_color(*status, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(*status, LV_OPA_COVER, 0);
-  lv_obj_set_style_pad_all(*status, 0, 0);
-  lv_obj_align_to(*status, button, LV_ALIGN_OUT_BOTTOM_MID, 0, 7);
+  lv_obj_set_pos(*icon, (r.w - iconImage->header.w) / 2,
+               (r.h - iconImage->header.h) / 2);
   return button;
 }
 
-// Compact pill buttons in the control panel's top-right corner cycle the UI
-// language (EN/FR), clock color and theme without leaving the panel.
+// Two-row settings grid cycles appearance without leaving the control centre.
 void updateControlPillLabels();
 
 void languageControlEvent(lv_event_t *event) {
@@ -551,177 +544,200 @@ void themeControlEvent(lv_event_t *event) {
 void fontControlEvent(lv_event_t *event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
   markUserActivity();
-  // Queue the next clock font; the main loop applies it inside a screen fade.
-  // Advance from the pending font when a change is already queued so rapid taps
-  // step through the list instead of re-selecting the same next font.
-  const uint8_t base =
-    clockFontChangeRequested ? pendingClockFontIndex : clockFontIndex;
+  const uint8_t base = clockFontChangeRequested ? pendingClockFontIndex : clockFontIndex;
   pendingClockFontIndex = static_cast<uint8_t>((base + 1) % CLOCK_FONT_COUNT);
   clockFontChangeRequested = true;
   updateControlPillLabels();
 }
 
-lv_obj_t *createControlPillButton(int16_t x, lv_event_cb_t callback,
+void sizeControlEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  markUserActivity();
+  const uint8_t base = clockSizeChangeRequested ? pendingClockSizeIndex : clockSizeIndex;
+  pendingClockSizeIndex = static_cast<uint8_t>((base + 1) % ClockLayout::CLOCK_SIZE_COUNT);
+  clockSizeChangeRequested = true;
+  updateControlPillLabels();
+}
+
+void closeControlEvent(lv_event_t *event) {
+  if (lv_event_get_code(event) == LV_EVENT_CLICKED) hideControlPanel(true);
+}
+
+lv_obj_t *createControlPillButton(const ClockLayout::Rect &r, lv_event_cb_t callback,
                                   lv_obj_t **labelOut) {
   lv_obj_t *button = lv_btn_create(controlPanel);
-  lv_obj_set_pos(button, x, 16);
-  lv_obj_set_size(button, 68, 44);
-  lv_obj_set_style_radius(button, 22, 0);
-  lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0A0A0A)), 0);
+  setControlRect(button, r);
+  lv_obj_set_style_radius(button, ClockLayout::scale(16, SCREEN_WIDTH), 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(button, 1, 0);
-  lv_obj_set_style_border_color(button, lv_color_hex(themeBorder(0x2A2A2A)), 0);
   lv_obj_set_style_shadow_width(button, 0, 0);
-  lv_obj_set_style_bg_color(button, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
-                            LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_set_style_pad_all(button, 2, 0);
   lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *label = lv_label_create(button);
-  lv_obj_set_style_text_font(label, &lv_font_ui_18, 0);
-  lv_obj_set_style_text_color(label, themeText(), 0);
+  lv_obj_set_width(label, r.w - 8);
+  lv_obj_set_style_text_font(label, &lv_font_ui_16, 0);
+  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
   lv_obj_center(label);
   *labelOut = label;
   return button;
 }
 
 void updateControlPillLabels() {
+  char text[48];
   if (languageControlLabel)
-    lv_label_set_text(languageControlLabel, uiLanguage == UI_LANG_FR ? "FR" : "EN");
-  if (themeControlLabel)
-    lv_label_set_text(themeControlLabel, themeShortName());
-  if (colorControlLabel) {
-    static const char *const colorNames[CLOCK_COLOR_COUNT] = {
-      "THM", "WHT", "AMB", "CYN", "PNK", "MNT", "GLD", "ICE", "RED"
-    };
-    lv_label_set_text(colorControlLabel,
-      colorNames[clockColorIndex < CLOCK_COLOR_COUNT ? clockColorIndex : 0]);
+    lv_label_set_text(languageControlLabel, uiLanguage == UI_LANG_FR ? "Langue FR" : "Lang EN");
+  if (themeControlLabel) {
+    snprintf(text, sizeof(text), "%s %s", tr(STR_THEME), themeShortName());
+    lv_label_set_text(themeControlLabel, text);
   }
-  if (fontControlLabel)
-    lv_label_set_text(fontControlLabel,
-      clockFontShortName(clockFontChangeRequested ? pendingClockFontIndex
-                                                  : clockFontIndex));
+  if (colorControlLabel) {
+    static const char *const colorNames[CLOCK_COLOR_COUNT] = {"THM", "WHT", "AMB", "CYN", "PNK", "MNT", "GLD", "ICE", "RED"};
+    snprintf(text, sizeof(text), "%s %s", tr(STR_CLOCK_COLOR),
+             colorNames[clockColorIndex < CLOCK_COLOR_COUNT ? clockColorIndex : 0]);
+    lv_label_set_text(colorControlLabel, text);
+  }
+  if (fontControlLabel) {
+    snprintf(text, sizeof(text), "%s %s", tr(STR_CLOCK_FONT),
+             clockFontShortName(clockFontChangeRequested ? pendingClockFontIndex : clockFontIndex));
+    lv_label_set_text(fontControlLabel, text);
+  }
+  if (sizeControlLabel) {
+    const uint8_t size = clockSizeChangeRequested ? pendingClockSizeIndex : clockSizeIndex;
+    snprintf(text, sizeof(text), "%s %c", tr(STR_CLOCK_SIZE), clockSizeShortName(size)[0]);
+    lv_label_set_text(sizeControlLabel, text);
+  }
+}
+
+lv_obj_t *createControlSlider(const ClockLayout::Rect &r, int32_t value,
+                              lv_event_cb_t callback) {
+  lv_obj_t *slider = lv_slider_create(controlPanel);
+  setControlRect(slider, r);
+  lv_slider_set_range(slider, 0, 100);
+  lv_slider_set_value(slider, value, LV_ANIM_OFF);
+  lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+  lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
+  lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_KNOB);
+  lv_obj_set_style_pad_all(slider, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(slider, ClockLayout::scale(8, SCREEN_WIDTH), LV_PART_KNOB);
+  lv_obj_set_ext_click_area(slider, ClockLayout::scale(12, SCREEN_WIDTH));
+  lv_obj_clear_flag(slider, LV_OBJ_FLAG_GESTURE_BUBBLE);
+  lv_obj_add_event_cb(slider, callback, LV_EVENT_ALL, nullptr);
+  return slider;
+}
+
+lv_obj_t *createControlLabel(const ClockLayout::Rect &r, const char *text,
+                             const lv_font_t *font, bool centered = false) {
+  lv_obj_t *label = lv_label_create(controlPanel);
+  setControlRect(label, r);
+  lv_label_set_text(label, text);
+  lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_font(label, font, 0);
+  lv_obj_set_style_text_align(label, centered ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, 0);
+  lv_obj_set_style_bg_opa(label, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_pad_all(label, 0, 0);
+  lv_obj_clear_flag(label, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+  return label;
 }
 
 void createControlPanel() {
   lv_obj_t *screen = lv_scr_act();
   lv_obj_add_event_cb(screen, mainUiGestureEvent, LV_EVENT_GESTURE, nullptr);
-
   controlPanel = lv_obj_create(screen);
   lv_obj_remove_style_all(controlPanel);
   lv_obj_set_pos(controlPanel, 0, 0);
-  lv_obj_set_size(controlPanel, CONTROL_PANEL_SIZE, CONTROL_PANEL_SIZE);
+  lv_obj_set_size(controlPanel, SCREEN_WIDTH, SCREEN_HEIGHT);
   lv_obj_set_style_bg_color(controlPanel, themePageBackground(), 0);
   lv_obj_set_style_bg_opa(controlPanel, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(controlPanel, 0, 0);
   lv_obj_set_style_pad_all(controlPanel, 0, 0);
   lv_obj_clear_flag(controlPanel, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(controlPanel, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(controlPanel, mainUiGestureEvent, LV_EVENT_GESTURE, nullptr);
+  const ClockLayout::Control l = ClockLayout::control(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-  batteryStatusIcon = createOfficialTablerIcon(
-    controlPanel, &tabler_battery, themeIcon());
-  lv_obj_align(batteryStatusIcon, LV_ALIGN_TOP_LEFT, 24, 8);
+  batteryStatusIcon = createOfficialTablerIcon(controlPanel, &tabler_battery, themeIcon());
+  placeControlIcon(batteryStatusIcon, l.batteryIcon);
+  batteryStatusLabel = createControlLabel(l.battery, "--%", &lv_font_ui_22);
+  controlCloseButton = lv_btn_create(controlPanel);
+  setControlRect(controlCloseButton, l.close);
+  lv_obj_set_style_radius(controlCloseButton, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_shadow_width(controlCloseButton, 0, 0);
+  lv_obj_add_event_cb(controlCloseButton, closeControlEvent, LV_EVENT_CLICKED, nullptr);
+  createOfficialTablerIcon(controlCloseButton, &tabler_x, themeIcon());
 
-  batteryStatusLabel = lv_label_create(controlPanel);
-  lv_label_set_text(batteryStatusLabel, "--%");
-  lv_obj_set_size(batteryStatusLabel, 92, 42);
-  lv_obj_set_style_text_font(batteryStatusLabel, &lv_font_ui_22, 0);
-  lv_obj_set_style_text_align(batteryStatusLabel, LV_TEXT_ALIGN_LEFT, 0);
-  lv_obj_set_style_bg_color(batteryStatusLabel, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(batteryStatusLabel, LV_OPA_COVER, 0);
-  lv_obj_align(batteryStatusLabel, LV_ALIGN_TOP_LEFT, 86, 25);
+  themeControlButton = createControlPillButton(l.settings[0], themeControlEvent, &themeControlLabel);
+  fontControlButton = createControlPillButton(l.settings[1], fontControlEvent, &fontControlLabel);
+  sizeControlButton = createControlPillButton(l.settings[2], sizeControlEvent, &sizeControlLabel);
+  colorControlButton = createControlPillButton(l.settings[3], colorControlEvent, &colorControlLabel);
+  languageControlButton = createControlPillButton(l.settings[4], languageControlEvent, &languageControlLabel);
 
-  // Four compact pills fit to the right of the battery readout (which ends at
-  // ~x178): clock color, clock font, UI language and UI theme.
-  colorControlButton = createControlPillButton(186, colorControlEvent,
-                                               &colorControlLabel);
-  fontControlButton = createControlPillButton(260, fontControlEvent,
-                                              &fontControlLabel);
-  languageControlButton = createControlPillButton(334, languageControlEvent,
-                                                  &languageControlLabel);
-  themeControlButton = createControlPillButton(408, themeControlEvent,
-                                               &themeControlLabel);
-  updateControlPillLabels();
+  wifiControlButton = createControlButton(l.wifi, &tabler_wifi, wifiControlEvent, &wifiControlIcon);
+  // These status labels sit beside, not below, the native 56 px icon.
+  lv_obj_set_pos(wifiControlIcon, l.wifiIcon.x - l.wifi.x, l.wifiIcon.y - l.wifi.y);
+  wifiControlStatus = createControlLabel(l.wifiStatus, "--", &lv_font_ui_18, true);
+  wifiControlIp = createControlLabel(l.wifiIp, "--", &lv_font_ui_16, true);
+  bluetoothControlButton = createControlButton(l.rotation, &tabler_lock,
+                                                bluetoothControlEvent, &bluetoothControlIcon);
+  lv_obj_set_pos(bluetoothControlIcon, l.rotationIcon.x - l.rotation.x,
+                 l.rotationIcon.y - l.rotation.y);
+  bluetoothControlStatus = createControlLabel(l.rotationStatus, "--", &lv_font_ui_18, true);
 
-  wifiControlButton = createControlButton(
-    controlPanel, CONTROL_PANEL_WIFI_Y, &tabler_wifi,
-    wifiControlEvent, &wifiControlIcon, &wifiControlStatus);
-  wifiControlIp = lv_label_create(controlPanel);
-  lv_label_set_text(wifiControlIp, "--");
-  lv_obj_set_size(wifiControlIp, 185, 24);
-  lv_label_set_long_mode(wifiControlIp, LV_LABEL_LONG_DOT);
-  lv_obj_set_style_text_font(wifiControlIp, &lv_font_ui_16, 0);
-  lv_obj_set_style_text_align(wifiControlIp, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_bg_color(wifiControlIp, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(wifiControlIp, LV_OPA_COVER, 0);
-  lv_obj_set_style_pad_all(wifiControlIp, 0, 0);
-  lv_obj_align_to(wifiControlIp, wifiControlStatus, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
-  bluetoothControlButton = createControlButton(
-    controlPanel, CONTROL_PANEL_BLUETOOTH_Y, &tabler_lock,
-    bluetoothControlEvent, &bluetoothControlIcon, &bluetoothControlStatus);
-
-  brightnessSlider = lv_slider_create(controlPanel);
-  lv_obj_set_pos(brightnessSlider, CONTROL_PANEL_BRIGHTNESS_X, CONTROL_PANEL_SLIDER_Y);
-  lv_obj_set_size(brightnessSlider, CONTROL_PANEL_SLIDER_WIDTH, CONTROL_PANEL_SLIDER_HEIGHT);
-  lv_slider_set_range(brightnessSlider, 0, 100);
-  lv_slider_set_value(brightnessSlider, 25, LV_ANIM_OFF);
-  lv_obj_set_style_bg_color(brightnessSlider, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
-                            LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(brightnessSlider, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
-                            LV_PART_KNOB);
-  lv_obj_clear_flag(brightnessSlider, LV_OBJ_FLAG_GESTURE_BUBBLE);
-  lv_obj_add_event_cb(brightnessSlider, brightnessControlEvent, LV_EVENT_ALL, nullptr);
-
-  volumeSlider = lv_slider_create(controlPanel);
-  lv_obj_set_pos(volumeSlider, CONTROL_PANEL_VOLUME_X, CONTROL_PANEL_SLIDER_Y);
-  lv_obj_set_size(volumeSlider, CONTROL_PANEL_SLIDER_WIDTH, CONTROL_PANEL_SLIDER_HEIGHT);
-  lv_slider_set_range(volumeSlider, 0, 100);
-  lv_slider_set_value(volumeSlider, DEFAULT_AUDIO_VOLUME, LV_ANIM_OFF);
-  lv_obj_set_style_bg_color(volumeSlider, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
-                            LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(volumeSlider, lv_color_hex(themeAccent(UI_ACCENT_BLUE)),
-                            LV_PART_KNOB);
-  lv_obj_clear_flag(volumeSlider, LV_OBJ_FLAG_GESTURE_BUBBLE);
-  lv_obj_add_event_cb(volumeSlider, volumeControlEvent, LV_EVENT_ALL, nullptr);
-
-  lv_obj_t *volumeIcon = createOfficialTablerIcon(
-    controlPanel, &tabler_volume, themeIcon());
-  lv_obj_align_to(volumeIcon, volumeSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
-
-  lv_obj_t *brightnessIcon = createOfficialTablerIcon(
-    controlPanel, &tabler_sun, themeIcon());
-  lv_obj_align_to(brightnessIcon, brightnessSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
-
-  updateControlPanelStatus();
+  brightnessSlider = createControlSlider(l.brightnessTrack, 25, brightnessControlEvent);
+  volumeSlider = createControlSlider(l.volumeTrack, DEFAULT_AUDIO_VOLUME, volumeControlEvent);
+  controlBrightnessIcon = createOfficialTablerIcon(controlPanel, &tabler_sun, themeIcon());
+  controlVolumeIcon = createOfficialTablerIcon(controlPanel, &tabler_volume, themeIcon());
+  placeControlIcon(controlBrightnessIcon, l.brightnessIcon);
+  placeControlIcon(controlVolumeIcon, l.volumeIcon);
+  controlBrightnessTitle = createControlLabel(l.brightnessTitle, tr(STR_BRIGHTNESS), &lv_font_ui_16);
+  controlVolumeTitle = createControlLabel(l.volumeTitle, tr(STR_VOLUME), &lv_font_ui_16);
+  controlBrightnessValue = createControlLabel(l.brightnessValue, "25%", &lv_font_ui_20, true);
+  controlVolumeValue = createControlLabel(l.volumeValue, "25%", &lv_font_ui_20, true);
+  i18nRegister(controlBrightnessTitle, STR_BRIGHTNESS);
+  i18nRegister(controlVolumeTitle, STR_VOLUME);
+  controlHintLabel = createControlLabel(l.hint, tr(STR_CONTROL_HINT), &lv_font_ui_14, true);
+  i18nRegister(controlHintLabel, STR_CONTROL_HINT);
+  refreshControlPanelTheme();
   lv_obj_add_flag(controlPanel, LV_OBJ_FLAG_HIDDEN);
 }
 
-// Re-apply the active theme to the pull-down control panel.
 void refreshControlPanelTheme() {
   if (!controlPanel) return;
   lv_obj_set_style_bg_color(controlPanel, themePageBackground(), 0);
   const lv_color_t accent = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
-  for (lv_obj_t *slider : {brightnessSlider, volumeSlider}) {
+  lv_obj_t *sliders[] = {brightnessSlider, volumeSlider};
+  for (lv_obj_t *slider : sliders) {
     if (!slider) continue;
+    lv_obj_set_style_bg_color(slider, themeControlSurface(UI_ACCENT_BLUE), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(slider, accent, LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(slider, accent, LV_PART_KNOB);
   }
-  if (batteryStatusIcon) lv_obj_set_style_img_recolor(batteryStatusIcon, themeIcon(), 0);
-  if (batteryStatusLabel) lv_obj_set_style_bg_color(batteryStatusLabel, lv_color_black(), 0);
-  if (wifiControlStatus) lv_obj_set_style_bg_color(wifiControlStatus, lv_color_black(), 0);
-  if (wifiControlIp) lv_obj_set_style_bg_color(wifiControlIp, lv_color_black(), 0);
-  if (bluetoothControlStatus) lv_obj_set_style_bg_color(bluetoothControlStatus, lv_color_black(), 0);
-  for (lv_obj_t *button : {languageControlButton, colorControlButton,
-                           fontControlButton, themeControlButton}) {
+  lv_obj_t *icons[] = {batteryStatusIcon, controlBrightnessIcon, controlVolumeIcon};
+  for (lv_obj_t *icon : icons)
+    if (icon) lv_obj_set_style_img_recolor(icon, themeIcon(), 0);
+  if (batteryStatusLabel) lv_obj_set_style_text_color(batteryStatusLabel, themeText(), 0);
+  lv_obj_t *dimLabels[] = {controlBrightnessTitle, controlVolumeTitle, controlHintLabel};
+  for (lv_obj_t *label : dimLabels)
+    if (label) lv_obj_set_style_text_color(label, themeTextDim(0x9AA3B2), 0);
+  lv_obj_t *valueLabels[] = {controlBrightnessValue, controlVolumeValue};
+  for (lv_obj_t *label : valueLabels)
+    if (label) lv_obj_set_style_text_color(label, accent, 0);
+  lv_obj_t *buttons[] = {languageControlButton, colorControlButton, fontControlButton,
+                         themeControlButton, sizeControlButton, controlCloseButton};
+  for (lv_obj_t *button : buttons) {
     if (!button) continue;
-    lv_obj_set_style_bg_color(button, lv_color_hex(themeSurface(0x0A0A0A)), 0);
-    lv_obj_set_style_border_color(button, lv_color_hex(themeBorder(0x2A2A2A)), 0);
-    lv_obj_set_style_bg_color(button, accent, LV_PART_MAIN | LV_STATE_PRESSED);
-    if (lv_obj_get_child_cnt(button))
-      lv_obj_set_style_text_color(lv_obj_get_child(button, 0), themeText(), 0);
+    lv_obj_set_style_bg_color(button, themeControlSurface(UI_ACCENT_BLUE), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, themeControlBorder(UI_ACCENT_BLUE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, themeTint(UI_ACCENT_BLUE, LV_OPA_40), LV_PART_MAIN | LV_STATE_PRESSED);
+    if (lv_obj_get_child_cnt(button)) {
+      lv_obj_t *child = lv_obj_get_child(button, 0);
+      lv_obj_set_style_text_color(child, themeText(), 0);
+      lv_obj_set_style_img_recolor(child, themeIcon(), 0);
+    }
   }
   updateControlPillLabels();
-  // Force the wifi/lock/battery status colors to be recomputed for the theme.
   updateControlPanelStatus();
 }
 
@@ -731,6 +747,8 @@ void syncControlPanelSettings() {
                         brightnessHardwareToPercent(activeBrightness), LV_ANIM_OFF);
   }
   if (volumeSlider) lv_slider_set_value(volumeSlider, audioVolume, LV_ANIM_OFF);
+  if (controlBrightnessValue) lv_label_set_text_fmt(controlBrightnessValue, "%u%%", brightnessHardwareToPercent(activeBrightness));
+  if (controlVolumeValue) lv_label_set_text_fmt(controlVolumeValue, "%u%%", audioVolume);
   if (!lowPowerMode && !screenFadeTransitionActive) gfx->setBrightness(activeBrightness);
   applyAudioVolume();
   updateControlPanelStatus();
@@ -791,7 +809,7 @@ void updateControlPanelStatus() {
   }
 
   const lv_color_t activeColor = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
-  const lv_color_t inactiveColor = lv_color_hex(themeSurface(0x141414));
+  const lv_color_t inactiveColor = themeControlSurface(UI_ACCENT_BLUE);
   const lv_color_t activeTextColor = lv_color_hex(themeAccent(UI_ACCENT_BLUE));
   const lv_color_t inactiveTextColor = themeTextDim(0x9299A3);
   if (displayedWifiEnabled != static_cast<int8_t>(wifiUserEnabled)) {
@@ -803,11 +821,8 @@ void updateControlPanelStatus() {
     lv_obj_set_style_text_color(wifiControlIp,
                                 wifiUserEnabled ? activeTextColor : inactiveTextColor, 0);
     if (wifiControlIcon) {
-      // On the amber theme an active (amber-filled) key needs a dark glyph;
-      // an inactive black key needs an amber glyph. Otherwise keep white.
       lv_obj_set_style_img_recolor(wifiControlIcon,
-        themeIsAmber() ? (wifiUserEnabled ? lv_color_black() : themeIcon())
-                       : lv_color_white(), 0);
+        wifiUserEnabled ? themeTextOnAccent() : themeIcon(), 0);
     }
     changed = true;
   }
@@ -820,8 +835,7 @@ void updateControlPanelStatus() {
     lv_obj_set_style_text_color(bluetoothControlStatus, lockTextColor, 0);
     if (bluetoothControlIcon) {
       lv_obj_set_style_img_recolor(bluetoothControlIcon,
-        themeIsAmber() ? (orientationLocked ? lv_color_black() : themeIcon())
-                       : lv_color_white(), 0);
+        orientationLocked ? themeTextOnAccent() : themeIcon(), 0);
     }
     changed = true;
   }

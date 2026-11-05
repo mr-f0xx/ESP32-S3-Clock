@@ -43,39 +43,36 @@ void initUiFonts() {
 // top-left clock over a wallpaper.
 bool mainClockCentered = false;
 
-const lv_font_t *currentStandbyClockFont() {
+// Native bitmap sizes keep glyph bounds exact in awake, centered and standby
+// modes. The default remains 96 px; smaller choices also fit over wallpapers.
+const lv_font_t *clockFontForPixels(uint8_t pixels) {
+  const bool medium = pixels == 72;
+  const bool small = pixels == 48;
   switch (clockFontIndex) {
-    case CLOCK_FONT_KAMERON: return &lv_font_kameron_96;
-    case CLOCK_FONT_SILKSCREEN: return &lv_font_silkscreen_96;
-    case CLOCK_FONT_DOTGOTHIC16: return &lv_font_dotgothic16_96;
-    case CLOCK_FONT_ORBITRON: return &lv_font_orbitron_96;
-    case CLOCK_FONT_AUDIOWIDE: return &lv_font_audiowide_96;
-    case CLOCK_FONT_CINZEL: return &lv_font_cinzel_96;
-    case CLOCK_FONT_BEBASNEUE: return &lv_font_bebasneue_96;
-    case CLOCK_FONT_DIGITALNUMBERS: return &lv_font_digitalnumbers_96;
-    case CLOCK_FONT_RAJDHANI: return &lv_font_rajdhani_96;
-    case CLOCK_FONT_ROBOTOMONO: return &lv_font_robotomono_96;
-    case CLOCK_FONT_NEONLINES: return &lv_font_neonlines_96;
-    default: return &lv_font_montserrat_time_96;
+    case CLOCK_FONT_KAMERON: return medium ? &lv_font_kameron_72 : small ? &lv_font_kameron_48 : &lv_font_kameron_96;
+    case CLOCK_FONT_SILKSCREEN: return medium ? &lv_font_silkscreen_72 : small ? &lv_font_silkscreen_48 : &lv_font_silkscreen_96;
+    case CLOCK_FONT_DOTGOTHIC16: return medium ? &lv_font_dotgothic16_72 : small ? &lv_font_dotgothic16_48 : &lv_font_dotgothic16_96;
+    case CLOCK_FONT_ORBITRON: return medium ? &lv_font_orbitron_72 : small ? &lv_font_orbitron_48 : &lv_font_orbitron_96;
+    case CLOCK_FONT_AUDIOWIDE: return medium ? &lv_font_audiowide_72 : small ? &lv_font_audiowide_48 : &lv_font_audiowide_96;
+    case CLOCK_FONT_CINZEL: return medium ? &lv_font_cinzel_72 : small ? &lv_font_cinzel_48 : &lv_font_cinzel_96;
+    case CLOCK_FONT_BEBASNEUE: return medium ? &lv_font_bebasneue_72 : small ? &lv_font_bebasneue_48 : &lv_font_bebasneue_96;
+    case CLOCK_FONT_DIGITALNUMBERS: return medium ? &lv_font_digitalnumbers_72 : small ? &lv_font_digitalnumbers_48 : &lv_font_digitalnumbers_96;
+    case CLOCK_FONT_RAJDHANI: return medium ? &lv_font_rajdhani_72 : small ? &lv_font_rajdhani_48 : &lv_font_rajdhani_96;
+    case CLOCK_FONT_ROBOTOMONO: return medium ? &lv_font_robotomono_72 : small ? &lv_font_robotomono_48 : &lv_font_robotomono_96;
+    case CLOCK_FONT_NEONLINES: return medium ? &lv_font_neonlines_72 : small ? &lv_font_neonlines_48 : &lv_font_neonlines_96;
+    default: return medium ? &lv_font_montserrat_time_72 : small ? &lv_font_montserrat_48 : &lv_font_montserrat_time_96;
   }
 }
 
+const lv_font_t *currentStandbyClockFont() {
+  return clockFontForPixels(ClockLayout::clockSizePixels(clockSizeIndex));
+}
 const lv_font_t *currentClockFont() {
-  if (lowPowerMode || mainClockCentered) return currentStandbyClockFont();
-  switch (clockFontIndex) {
-    case CLOCK_FONT_KAMERON: return &lv_font_kameron_48;
-    case CLOCK_FONT_SILKSCREEN: return &lv_font_silkscreen_48;
-    case CLOCK_FONT_DOTGOTHIC16: return &lv_font_dotgothic16_48;
-    case CLOCK_FONT_ORBITRON: return &lv_font_orbitron_48;
-    case CLOCK_FONT_AUDIOWIDE: return &lv_font_audiowide_48;
-    case CLOCK_FONT_CINZEL: return &lv_font_cinzel_48;
-    case CLOCK_FONT_BEBASNEUE: return &lv_font_bebasneue_48;
-    case CLOCK_FONT_DIGITALNUMBERS: return &lv_font_digitalnumbers_48;
-    case CLOCK_FONT_RAJDHANI: return &lv_font_rajdhani_48;
-    case CLOCK_FONT_ROBOTOMONO: return &lv_font_robotomono_48;
-    case CLOCK_FONT_NEONLINES: return &lv_font_neonlines_48;
-    default: return &lv_font_montserrat_48;
-  }
+  return currentStandbyClockFont();
+}
+
+const char *clockSizeShortName(uint8_t index) {
+  return index == 0 ? "S" : index == 1 ? "M" : "L";
 }
 
 // Compact 3-letter tag for the on-device font pill in the control panel.
@@ -140,9 +137,9 @@ int16_t measureTimePanelWidth(const char *text) {
   lv_txt_get_size(&textSize, text, currentClockFont(), 0, 0,
                   LV_COORD_MAX, LV_TEXT_FLAG_NONE);
   const bool large = lowPowerMode || mainClockCentered;
-  const int16_t horizontalPadding = large ? 32 : TIME_PANEL_HORIZONTAL_PADDING;
+  const int16_t horizontalPadding = large ? 16 : TIME_PANEL_HORIZONTAL_PADDING;
   const int16_t minimumWidth = large ? 240 : TIME_PANEL_MIN_WIDTH;
-  const int16_t maximumWidth = large ? SCREEN_WIDTH - 16 : TIME_PANEL_MAX_WIDTH;
+  const int16_t maximumWidth = SCREEN_WIDTH - 32;
   return constrain(static_cast<int16_t>(textSize.x) + horizontalPadding * 2,
                    minimumWidth, maximumWidth);
 }
@@ -157,9 +154,12 @@ void resizeTimePanelForText(const char *text) {
     lv_obj_set_size(timePanel, timePanelWidth, panelHeight);
     return;
   }
-  if (nextWidth == timePanelWidth && timeBackground) return;
+  const int16_t panelHeight = min<int16_t>(TIME_PANEL_HEIGHT,
+    max<int16_t>(84, currentClockFont()->line_height + 24));
+  if (nextWidth == timePanelWidth && timeBackground &&
+      lv_obj_get_height(timePanel) == panelHeight) return;
   timePanelWidth = nextWidth;
-  lv_obj_set_size(timePanel, timePanelWidth, TIME_PANEL_HEIGHT);
+  lv_obj_set_size(timePanel, timePanelWidth, panelHeight);
 
   if (!timePanelPixels || !timeBackground) {
     lv_obj_set_style_bg_color(timePanel, lv_color_black(), 0);
@@ -173,13 +173,13 @@ void resizeTimePanelForText(const char *text) {
   const lv_color_t leftColor = lv_color_hex(0x000000);
   const lv_color_t rightColor = lv_color_hex(themeIsAmber() ? 0x1A1206 : 0x101010);
   const float halfWidth = timePanelWidth * 0.5f;
-  const float halfHeight = TIME_PANEL_HEIGHT * 0.5f;
+  const float halfHeight = panelHeight * 0.5f;
 
-  for (int16_t y = 0; y < TIME_PANEL_HEIGHT; ++y) {
+  for (int16_t y = 0; y < panelHeight; ++y) {
     for (int16_t x = 0; x < timePanelWidth; ++x) {
       const float qx = fabsf(x - (timePanelWidth - 1) * 0.5f) -
                        (halfWidth - TIME_PANEL_RADIUS);
-      const float qy = fabsf(y - (TIME_PANEL_HEIGHT - 1) * 0.5f) -
+      const float qy = fabsf(y - (panelHeight - 1) * 0.5f) -
                        (halfHeight - TIME_PANEL_RADIUS);
       const float outsideX = max(qx, 0.0f);
       const float outsideY = max(qy, 0.0f);
@@ -201,7 +201,7 @@ void resizeTimePanelForText(const char *text) {
   }
 
   lv_canvas_set_buffer(timeBackground, timePanelPixels,
-                       timePanelWidth, TIME_PANEL_HEIGHT,
+                       timePanelWidth, panelHeight,
                        LV_IMG_CF_TRUE_COLOR_ALPHA);
   lv_obj_center(timeBackground);
 }
@@ -246,10 +246,12 @@ void applyClockFont() {
     clockFontIndex = CLOCK_FONT_MONTSERRAT;
     pendingClockFontIndex = CLOCK_FONT_MONTSERRAT;
     preferences.putUChar("clock_font", clockFontIndex);
-    font = (lowPowerMode || mainClockCentered) ? &lv_font_montserrat_time_96
-                                              : &lv_font_montserrat_48;
+    font = clockFontForPixels(ClockLayout::clockSizePixels(clockSizeIndex));
   }
   lv_obj_set_style_text_font(timeLabel, font, 0);
+  // The complete HH:MM string must fit before the panel is centered. All bundled
+  // faces are tested at all three native sizes; no transform zoom is used.
+  lv_obj_set_width(timeLabel, LV_SIZE_CONTENT);
   applyClockColor();
   timePanelWidth = 0;
   resizeTimePanelForText(displayedTimeText[0] ? displayedTimeText : "--:--");
@@ -260,9 +262,9 @@ void applyClockFont() {
                 static_cast<unsigned>(font->line_height));
 }
 
-// Awake main page: with a wallpaper/album background keep the small top-left
-// clock over its scrim; with no background show the large centered clock on
-// pure black (no date), matching the standby look the user expects.
+// Awake main page: with a wallpaper/album background keep the selected-size
+// clock top-left over its scrim; with no background center it on pure black
+// (no date), matching the standby look the user expects.
 void refreshMainClockLayout() {
   if (!timePanel || !timeLabel || lowPowerMode) return;
   const bool hasBackground =
@@ -276,7 +278,7 @@ void refreshMainClockLayout() {
   } else {
     lv_obj_set_style_bg_color(lv_scr_act(), themePageBackground(), 0);
     if (timeBackground) lv_obj_clear_flag(timeBackground, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_align(timePanel, LV_ALIGN_TOP_LEFT, 24, 24);
+    lv_obj_align(timePanel, LV_ALIGN_TOP_LEFT, ClockLayout::scale(24, SCREEN_WIDTH), ClockLayout::scale(24, SCREEN_HEIGHT));
   }
   timePanelWidth = 0;
   applyClockFont();
@@ -310,7 +312,7 @@ void createClockUi() {
   lv_obj_set_style_shadow_width(timePanel, 0, 0);
   lv_obj_set_style_pad_all(timePanel, 0, 0);
   lv_obj_clear_flag(timePanel, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_align(timePanel, LV_ALIGN_TOP_LEFT, 24, 24);
+  lv_obj_align(timePanel, LV_ALIGN_TOP_LEFT, ClockLayout::scale(24, SCREEN_WIDTH), ClockLayout::scale(24, SCREEN_HEIGHT));
 
   createFeatheredTimeBackground();
   timePanelWidth = 0;

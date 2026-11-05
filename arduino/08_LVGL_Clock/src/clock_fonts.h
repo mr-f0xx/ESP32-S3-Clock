@@ -6,6 +6,19 @@
 extern "C" {
 #endif
 
+extern const lv_font_t lv_font_kameron_72;
+extern const lv_font_t lv_font_silkscreen_72;
+extern const lv_font_t lv_font_dotgothic16_72;
+extern const lv_font_t lv_font_orbitron_72;
+extern const lv_font_t lv_font_audiowide_72;
+extern const lv_font_t lv_font_cinzel_72;
+extern const lv_font_t lv_font_bebasneue_72;
+extern const lv_font_t lv_font_digitalnumbers_72;
+extern const lv_font_t lv_font_rajdhani_72;
+extern const lv_font_t lv_font_robotomono_72;
+extern const lv_font_t lv_font_neonlines_72;
+extern const lv_font_t lv_font_montserrat_time_72;
+
 extern const lv_font_t lv_font_kameron_48;
 extern const lv_font_t lv_font_silkscreen_48;
 extern const lv_font_t lv_font_dotgothic16_48;

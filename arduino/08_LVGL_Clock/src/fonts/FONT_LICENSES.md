@@ -17,7 +17,7 @@ The generated LVGL bitmap subsets in this directory use these Google Fonts:
 - Neon Lines (a retro clock subset derived from Monoton)
 
 All of these source families are distributed under the SIL Open Font License 1.1.
-Only `0-9`, `:` and `-` were converted at 48 px and 96 px for the clock display.
+Only `0-9`, `:` and `-` were converted at 48 px, 72 px and 96 px for the clock display.
 Orbitron and Cinzel are variable fonts upstream; the converted subsets were
 instantiated at weight 700 before running `lv_font_conv`.
 The Inter weather subset contains space, `-`, `0-9`, `:`, and `\u00b0` at a true
@@ -37,6 +37,6 @@ Source: https://github.com/google/fonts
 Montserrat: https://github.com/JulietaUla/Montserrat
 License: https://openfontlicense.org/open-font-license-official-text/
 
-The four new font sources are pinned at Google Fonts revision `eb20e9cf19d97cf579fa3867d729d4222d6c59e1`. Their individual copyright and OFL notices are included in [`licenses/clock_fonts`](../../../../licenses/clock_fonts). Regenerate with `tools/generate_clock_fonts.py` and `lv_font_conv` 1.5.3. Roboto Mono uses its source font default variable weight.
+The clock font sources are pinned at Google Fonts revision `eb20e9cf19d97cf579fa3867d729d4222d6c59e1`. Their individual copyright and OFL notices are included in [`licenses/clock_fonts`](../../../../licenses/clock_fonts). Regenerate with `tools/generate_clock_fonts.py` (fonttools 4.60.1) and `lv_font_conv` 1.5.3; use `--sizes 72` to add only the medium assets. Roboto Mono uses its source font default variable weight.
 
 Neon Lines is a converted subset of Monoton, renamed because Monoton is a reserved font name.

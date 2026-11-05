@@ -120,6 +120,8 @@ void handleStatus() {
   json += String(imageCount);
   json += F(",\"font\":");
   json += String(clockFontIndex);
+  json += F(",\"clock_size\":");
+  json += String(clockSizeIndex);
   json += F(",\"color\":");
   json += String(clockColorIndex);
   json += F(",\"night_start\":");
@@ -198,6 +200,19 @@ void handleUiSettings() {
     }
     if (static_cast<uint8_t>(color) != clockColorIndex) {
       setClockColor(static_cast<uint8_t>(color), true);
+      changed = true;
+    }
+  }
+  if (server.hasArg("clock_size")) {
+    const String value = server.arg("clock_size");
+    if (value.length() != 1 || value[0] < '0' || value[0] >= '0' + ClockLayout::CLOCK_SIZE_COUNT) {
+      server.send(400, "text/plain; charset=utf-8", "Invalid clock size");
+      return;
+    }
+    const uint8_t size = static_cast<uint8_t>(value[0] - '0');
+    if (size != clockSizeIndex) {
+      pendingClockSizeIndex = size;
+      clockSizeChangeRequested = true;
       changed = true;
     }
   }
@@ -464,8 +479,15 @@ void loadSettings() {
   preferences.begin("clock", false);
   uiLanguage = min<uint8_t>(preferences.getUChar("ui_lang", UI_LANG_EN),
                             UI_LANG_COUNT - 1);
-  uiTheme = min<uint8_t>(preferences.getUChar("ui_theme", UI_THEME_BLACK),
-                         UI_THEME_COUNT - 1);
+  // Schema 2 removes the retired default without changing other saved themes.
+  const bool themeSchema2 = preferences.getUChar("ui_schema", 0) >= 2;
+  uiTheme = ClockLayout::migrateTheme(
+    preferences.getUChar(themeSchema2 ? "ui_theme_v2" : "ui_theme", UI_THEME_GLOW),
+    themeSchema2);
+  if (!themeSchema2) {
+    preferences.putUChar("ui_theme_v2", uiTheme);
+    preferences.putUChar("ui_schema", 2);
+  }
   savedSsid = preferences.getString("ssid", "");
   savedPassword = preferences.getString("pass", "");
   timezoneRule = preferences.getString("tz", "CST-8");
@@ -524,6 +546,9 @@ void loadSettings() {
   clockFontIndex = min(preferences.getUChar("clock_font", CLOCK_FONT_MONTSERRAT),
                        static_cast<uint8_t>(CLOCK_FONT_COUNT - 1));
   pendingClockFontIndex = clockFontIndex;
+  clockSizeIndex = ClockLayout::normalizeClockSize(preferences.getUChar(
+    "clock_size", ClockLayout::CLOCK_SIZE_DEFAULT));
+  pendingClockSizeIndex = clockSizeIndex;
   clockColorIndex = min<uint8_t>(preferences.getUChar("clock_color", 0),
                                  CLOCK_COLOR_COUNT - 1);
   applyClockFont();

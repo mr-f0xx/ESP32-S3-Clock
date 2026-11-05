@@ -150,7 +150,13 @@ enum UiStr : uint16_t {
   STR_NOTE_SAVE_FAILED,
   STR_LANGUAGE,
   STR_THEME,
-  STR_THEME_BLACK,
+  STR_THEME_GLOW,
+  STR_CONTROL_HINT,
+  STR_BRIGHTNESS,
+  STR_VOLUME,
+  STR_CLOCK_SIZE,
+  STR_CLOCK_FONT,
+  STR_CLOCK_COLOR,
   STR_THEME_AMBER,
   STR_COUNT
 };
@@ -308,7 +314,13 @@ static const char *const UI_TEXT[STR_COUNT][UI_LANG_COUNT] = {
   /* STR_NOTE_SAVE_FAILED */ {"Save failed", "Échec"},
   /* STR_LANGUAGE */ {"Language", "Langue"},
   /* STR_THEME */ {"Theme", "Thème"},
-  /* STR_THEME_BLACK */ {"AMOLED Black", "Noir AMOLED"},
+  /* STR_THEME_GLOW */ {"Icon Glow", "Lueur d'icônes"},
+  /* STR_CONTROL_HINT */ {"Swipe up to close", "Glissez vers le haut pour fermer"},
+  /* STR_BRIGHTNESS */ {"Brightness", "Luminosité"},
+  /* STR_VOLUME */ {"Volume", "Volume"},
+  /* STR_CLOCK_SIZE */ {"Size", "Taille"},
+  /* STR_CLOCK_FONT */ {"Font", "Police"},
+  /* STR_CLOCK_COLOR */ {"Color", "Couleur"},
   /* STR_THEME_AMBER */ {"CRT Amber", "Ambre CRT"},
 };
 

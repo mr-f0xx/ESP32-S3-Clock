@@ -25,17 +25,22 @@ ICONS = {
     "battery-off": 56,
     # Clock-mode selector artwork. Keep these at their final LVGL size because
     # Alpha-8 sources must not be zoomed at runtime.
-    "photo": 80,
-    # App-menu artwork. Every tile uses the same native canvas and the official
-    # Tabler outline source so stroke weight and optical scale stay consistent.
-    "clock": 80,
-    "alarm": 80,
-    "adjustments": 80,
-    "music": 80,
-    "calendar": 80,
-    "video": 80,
-    "device-tv": 80,
-    "cloud": 80,
+    "photo": 120,
+    # App-menu artwork. Generate at the final 120 px launcher size: LVGL's
+    # software transform path does not reliably render zoomed Alpha-8 images.
+    # The cloud map is shared with the 156 px clock-mode button; photo uses the
+    # same native size so both selector icons stay optically consistent.
+    "clock": 120,
+    "alarm": 120,
+    "adjustments": 120,
+    "music": 120,
+    "calendar": 120,
+    "video": 120,
+    "device-tv": 120,
+    # The launcher power glyph used a coarse 12-point polyline and looked
+    # faceted at 120 px. Use the official smooth outline like the other keys.
+    "power": 120,
+    "cloud": 120,
     "x": 32,
 }
 

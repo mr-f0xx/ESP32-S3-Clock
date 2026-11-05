@@ -208,7 +208,10 @@ void openUtilityApp(uint8_t app) {
     lv_obj_add_event_cb(utilityNote, utilityNoteChanged, LV_EVENT_VALUE_CHANGED, nullptr);
     utilityStatus = lv_label_create(utilityPage);
     lv_obj_set_style_text_color(utilityStatus, accent, 0);
-    lv_obj_set_pos(utilityStatus, 185, 195);
+    lv_obj_set_style_text_font(utilityStatus, &lv_font_ui_16, 0);
+    lv_obj_set_pos(utilityStatus, 20, 190);
+    lv_obj_set_size(utilityStatus, 270, 36);
+    lv_label_set_long_mode(utilityStatus, LV_LABEL_LONG_WRAP);
     utilityButton(utilityPage, tr(STR_SAVE_NOTE), 310, 187, 150, 45, utilitySaveEvent, 0, 2);
     lv_obj_t *keyboard = lv_keyboard_create(utilityPage);
     lv_obj_set_size(keyboard, 480, 238);

@@ -59,6 +59,9 @@ uint32_t radioLastTitleRefreshAt = 0;
 uint32_t radioUnderflowCount = 0;
 uint32_t radioLastUnderflowLogAt = 0;
 uint32_t radioLastBufferLogAt = 0;
+lv_obj_t *radioEqualizer = nullptr;
+lv_obj_t *radioEqualizerBars[5] = {};
+bool radioEqualizerRunning = false;
 
 void updateRadioPageText();
 void updateRadioPlayPauseIcon();
@@ -66,6 +69,7 @@ void updateRadioTitle();
 void setRadioStatus(UiStr id);
 void hideRadioStationList();
 void radioStationRowEvent(lv_event_t *event);
+void syncRadioPlayingAnimation();
 
 // ---- Audio callbacks (run in the main loop with the decoder) ---------------
 void radioMetadataCallback(void *cbData, const char *type, bool isUnicode,
@@ -120,6 +124,45 @@ void updateRadioTitle() {
   }
 }
 
+// A tiny five-bar meter is driven only while the decoder reports PLAYING and
+// the radio page is actually visible. Animations are deleted on pause, stop,
+// buffering, reconnect, station-list overlay, control centre and standby.
+void radioBarAnimExec(void *object, int32_t value) {
+  lv_obj_t *bar = static_cast<lv_obj_t *>(object);
+  lv_obj_set_height(bar, value);
+  const int16_t index = static_cast<int16_t>(reinterpret_cast<uintptr_t>(lv_obj_get_user_data(bar)));
+  lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, index * ClockLayout::scale(16, SCREEN_WIDTH), 0);
+}
+
+void syncRadioPlayingAnimation() {
+  if (!radioEqualizer) return;
+  const bool playing = radioStatusId == STR_PLAYING && radioStreamActive && !radioPaused &&
+    radioPageVisible && !radioStationListVisible && !controlPanelVisible && !lowPowerMode;
+  if (playing == radioEqualizerRunning) {
+    if (playing) lv_obj_clear_flag(radioEqualizer, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(radioEqualizer, LV_OBJ_FLAG_HIDDEN);
+    return;
+  }
+  radioEqualizerRunning = playing;
+  for (uint8_t i = 0; i < 5; ++i) {
+    lv_anim_del(radioEqualizerBars[i], radioBarAnimExec);
+    if (!playing) continue;
+    lv_anim_t anim;
+    lv_anim_init(&anim);
+    lv_anim_set_var(&anim, radioEqualizerBars[i]);
+    lv_anim_set_exec_cb(&anim, radioBarAnimExec);
+    lv_anim_set_values(&anim, ClockLayout::scale(7 + (i % 2) * 3, SCREEN_HEIGHT),
+                       ClockLayout::scale(24 + (i % 3) * 4, SCREEN_HEIGHT));
+    lv_anim_set_time(&anim, 460 + i * 55);
+    lv_anim_set_playback_time(&anim, 220 + i * 35);
+    lv_anim_set_repeat_count(&anim, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&anim, lv_anim_path_ease_in_out);
+    lv_anim_start(&anim);
+  }
+  if (playing) lv_obj_clear_flag(radioEqualizer, LV_OBJ_FLAG_HIDDEN);
+  else lv_obj_add_flag(radioEqualizer, LV_OBJ_FLAG_HIDDEN);
+}
+
 void updateRadioPlayPauseIcon() {
   const bool playing = radioStreamActive && !radioPaused;
   if (radioPlayIcon) {
@@ -130,6 +173,7 @@ void updateRadioPlayPauseIcon() {
     if (playing) lv_obj_clear_flag(radioPauseIcon, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(radioPauseIcon, LV_OBJ_FLAG_HIDDEN);
   }
+  syncRadioPlayingAnimation();
 }
 
 void refreshRadioStationListStyles() {
@@ -141,12 +185,12 @@ void refreshRadioStationListStyles() {
     // Theme helpers already collapse amber to phosphor and the neon palettes
     // to their single accent, so one path covers every theme.
     lv_obj_set_style_bg_color(row,
-      lv_color_hex(selected ? themeAccent(UI_ACCENT_BLUE)
-                            : themeSurface(0x0D0D12)), LV_PART_MAIN);
+      selected ? lv_color_hex(themeAccent(UI_ACCENT_BLUE))
+               : themeControlSurface(UI_ACCENT_BLUE), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(row, selected ? LV_OPA_COVER : LV_OPA_80, LV_PART_MAIN);
     lv_obj_set_style_border_color(row,
-      lv_color_hex(selected ? themeAccent(UI_ACCENT_BLUE)
-                            : themeBorder(0x282C37)), LV_PART_MAIN);
+      selected ? lv_color_hex(themeAccent(UI_ACCENT_BLUE))
+               : themeControlBorder(UI_ACCENT_BLUE), LV_PART_MAIN);
     if (lv_obj_get_child_cnt(row)) {
       lv_obj_set_style_text_color(lv_obj_get_child(row, 0),
         selected ? themeTextOnAccent() : themeText(), 0);
@@ -308,6 +352,7 @@ bool startRadioStation(uint8_t index) {
 }
 
 void serviceRadioPlayback() {
+  syncRadioPlayingAnimation();
   if (lowPowerMode) return;
   if (radioReconnectPending) {
     if (millis() - radioLastReconnectAt >= RADIO_RECONNECT_DELAY_MS) {
@@ -402,6 +447,7 @@ void hideRadioStationList() {
   radioStationListVisible = false;
   if (radioStationListPanel)
     lv_obj_add_flag(radioStationListPanel, LV_OBJ_FLAG_HIDDEN);
+  syncRadioPlayingAnimation();
 }
 
 void showRadioStationList() {
@@ -410,6 +456,7 @@ void showRadioStationList() {
   refreshRadioStationListStyles();
   lv_obj_clear_flag(radioStationListPanel, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(radioStationListPanel);
+  syncRadioPlayingAnimation();
   if (radioStationIndex < lv_obj_get_child_cnt(radioStationListList))
     lv_obj_scroll_to_view(
       lv_obj_get_child(radioStationListList, radioStationIndex), LV_ANIM_OFF);
@@ -434,6 +481,7 @@ void showRadioPage(bool fade) {
   lv_obj_clear_flag(radioPage, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(radioPage);
   updateRadioPageText();
+  syncRadioPlayingAnimation();
 }
 
 void hideRadioPage(bool fade, bool returnToMenu) {
@@ -451,6 +499,7 @@ void hideRadioPage(bool fade, bool returnToMenu) {
   radioPageShowRequested = false;
   radioPageHideRequested = false;
   lv_obj_add_flag(radioPage, LV_OBJ_FLAG_HIDDEN);
+  syncRadioPlayingAnimation();
   if (returnToMenu && !lowPowerMode) showAppMenu(false);
 }
 
@@ -618,6 +667,24 @@ void createRadioPage(lv_obj_t *screen) {
   lv_obj_set_style_text_color(radioStatusLabel, themeTextDim(0xB8C0CC), 0);
   lv_obj_align(radioStatusLabel, LV_ALIGN_TOP_MID, 0, 182);
 
+  radioEqualizer = lv_obj_create(radioPage);
+  lv_obj_remove_style_all(radioEqualizer);
+  lv_obj_set_size(radioEqualizer, ClockLayout::scale(76, SCREEN_WIDTH), ClockLayout::scale(32, SCREEN_HEIGHT));
+  lv_obj_align(radioEqualizer, LV_ALIGN_TOP_MID, 0, ClockLayout::scale(232, SCREEN_HEIGHT));
+  lv_obj_clear_flag(radioEqualizer, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
+  for (uint8_t i = 0; i < 5; ++i) {
+    radioEqualizerBars[i] = lv_obj_create(radioEqualizer);
+    lv_obj_remove_style_all(radioEqualizerBars[i]);
+    lv_obj_set_size(radioEqualizerBars[i], ClockLayout::scale(8, SCREEN_WIDTH), ClockLayout::scale(10, SCREEN_HEIGHT));
+    lv_obj_set_style_radius(radioEqualizerBars[i], LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(radioEqualizerBars[i], lv_color_hex(themeAccent(UI_ACCENT_BLUE)), 0);
+    lv_obj_set_style_bg_opa(radioEqualizerBars[i], LV_OPA_COVER, 0);
+    lv_obj_set_user_data(radioEqualizerBars[i], reinterpret_cast<void *>(static_cast<uintptr_t>(i)));
+    lv_obj_align(radioEqualizerBars[i], LV_ALIGN_BOTTOM_LEFT, i * ClockLayout::scale(16, SCREEN_WIDTH), 0);
+    lv_obj_clear_flag(radioEqualizerBars[i], LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+  }
+  lv_obj_add_flag(radioEqualizer, LV_OBJ_FLAG_HIDDEN);
+
   createRadioControlButton(radioPage, 58, -176, 300, radioStationListEvent,
                            TABLER_ICON_PLAYLIST, 28);
   createRadioControlButton(radioPage, 58, -88, 300, radioPreviousEvent,
@@ -666,6 +733,8 @@ void refreshRadioTheme() {
       lv_color_hex(themeAccent(UI_ACCENT_BLUE)), 0);
   if (radioStatusLabel)
     lv_obj_set_style_text_color(radioStatusLabel, themeTextDim(0xB8C0CC), 0);
+  for (lv_obj_t *bar : radioEqualizerBars)
+    if (bar) lv_obj_set_style_bg_color(bar, lv_color_hex(themeAccent(UI_ACCENT_BLUE)), 0);
   if (radioHintLabel)
     lv_obj_set_style_text_color(radioHintLabel, themeTextDim(0x777D8D), 0);
 

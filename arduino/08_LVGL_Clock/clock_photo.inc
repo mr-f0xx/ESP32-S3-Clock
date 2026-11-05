@@ -349,7 +349,7 @@ void createPhotoFramePage(lv_obj_t *screen) {
   lv_label_set_long_mode(photoStatusLabel, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_align(photoStatusLabel, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_font(photoStatusLabel, &lv_font_ui_20, 0);
-  lv_obj_set_style_text_color(photoStatusLabel, lv_color_white(), 0);
+  lv_obj_set_style_text_color(photoStatusLabel, themeText(), 0);
   lv_obj_set_style_bg_color(photoStatusLabel, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(photoStatusLabel, LV_OPA_60, 0);
   lv_obj_set_style_radius(photoStatusLabel, 12, 0);
@@ -357,7 +357,7 @@ void createPhotoFramePage(lv_obj_t *screen) {
 
   photoCountLabel = lv_label_create(photoFramePage);
   lv_obj_set_style_text_font(photoCountLabel, &lv_font_ui_18, 0);
-  lv_obj_set_style_text_color(photoCountLabel, lv_color_white(), 0);
+  lv_obj_set_style_text_color(photoCountLabel, themeText(), 0);
   lv_obj_set_style_bg_color(photoCountLabel, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(photoCountLabel, LV_OPA_60, 0);
   lv_obj_set_style_radius(photoCountLabel, 10, 0);
@@ -379,7 +379,7 @@ void createPhotoFramePage(lv_obj_t *screen) {
   lv_obj_t *hint = lv_label_create(photoFramePage);
   i18nRegister(hint, STR_PHOTO_FRAME_HINT);
   lv_obj_set_style_text_font(hint, &lv_font_ui_16, 0);
-  lv_obj_set_style_text_color(hint, lv_color_white(), 0);
+  lv_obj_set_style_text_color(hint, themeText(), 0);
   lv_obj_set_style_bg_color(hint, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(hint, LV_OPA_60, 0);
   lv_obj_set_style_radius(hint, 10, 0);
@@ -391,6 +391,11 @@ void createPhotoFramePage(lv_obj_t *screen) {
 
 void refreshPhotoFrameTheme() {
   if (!photoFramePage) return;
+  // Media keeps a neutral black backdrop for image contrast; overlay text still
+  // follows the selected theme (phosphor amber / neon-tinted white).
+  lv_obj_t *overlayLabels[] = {photoStatusLabel, photoCountLabel};
+  for (lv_obj_t *label : overlayLabels)
+    if (label) lv_obj_set_style_text_color(label, themeText(), 0);
   const uint32_t count = lv_obj_get_child_cnt(photoFramePage);
   for (uint32_t i = 0; i < count; ++i) {
     lv_obj_t *child = lv_obj_get_child(photoFramePage, i);
