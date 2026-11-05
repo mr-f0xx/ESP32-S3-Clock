@@ -64,6 +64,66 @@ lv_obj_t *radioEqualizerBars[5] = {};
 bool radioEqualizerRunning = false;
 
 void updateRadioPageText();
+void updateRadioPlayPauseIcon();
+void updateRadioTitle();
+void setRadioStatus(UiStr id);
+void hideRadioStationList();
+void radioStationRowEvent(lv_event_t *event);
+void syncRadioPlayingAnimation();
+
+// ---- Audio callbacks (run in the main loop with the decoder) ---------------
+void radioMetadataCallback(void *cbData, const char *type, bool isUnicode,
+                           const char *str) {
+  (void)cbData;
+  (void)isUnicode;
+  if (!type || !str) return;
+  if (strcmp(type, "StreamTitle") == 0) {
+    strlcpy(radioStreamTitle, str, sizeof(radioStreamTitle));
+    updateRadioTitle();
+  }
+}
+
+void radioStatusCallback(void *cbData, int code, const char *str) {
+  (void)cbData;
+  (void)str;
+  if (code == AudioFileSourceBuffer::STATUS_UNDERFLOW) {
+    ++radioUnderflowCount;
+    const uint32_t now = millis();
+    if (now - radioLastUnderflowLogAt >= 2000) {
+      radioLastUnderflowLogAt = now;
+      Serial.printf("Radio: ring underflow #%lu (fill %lu KiB)\n",
+                    static_cast<unsigned long>(radioUnderflowCount),
+                    radioBuffer
+                      ? static_cast<unsigned long>(radioBuffer->getFillLevel() / 1024U)
+                      : 0UL);
+    }
+  }
+  if (code == AudioFileSourceBuffer::STATUS_FILLING ||
+      code == AudioFileSourceBuffer::STATUS_UNDERFLOW) {
+    if (radioStreamActive && !radioReconnectPending && !radioPaused)
+      setRadioStatus(STR_RADIO_BUFFERING);
+  }
+}
+
+// ---- Status / text ---------------------------------------------------------
+void setRadioStatus(UiStr id) {
+  radioStatusId = id;
+  if (radioStatusLabel) lv_label_set_text(radioStatusLabel, tr(id));
+}
+
+void updateRadioTitle() {
+  if (!radioTitleLabel) return;
+  if (radioStreamTitle[0]) {
+    lv_label_set_text(radioTitleLabel, radioStreamTitle);
+  } else if (!radioStreamActive) {
+    lv_label_set_text(radioTitleLabel, tr(STR_RADIO_CHOOSE_STATION));
+  } else if (millis() - radioStreamStartedAt < RADIO_TITLE_WAIT_MS) {
+    lv_label_set_text(radioTitleLabel, tr(STR_RADIO_WAITING_TITLE));
+  } else {
+    lv_label_set_text(radioTitleLabel, tr(STR_RADIO_NO_TITLE));
+  }
+}
+
 // A tiny five-bar meter is driven only while the decoder reports PLAYING and
 // the radio page is actually visible. Animations are deleted on pause, stop,
 // buffering, reconnect, station-list overlay, control centre and standby.

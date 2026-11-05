@@ -309,7 +309,7 @@ void createTimerPage(lv_obj_t *screen) {
   timerAlertTimeLabel = lv_label_create(timerAlertOverlay);
   setTimerRect(timerAlertTimeLabel, l.alertTime);
   lv_label_set_text(timerAlertTimeLabel, "00:00");
-  lv_obj_set_style_text_font(timerAlertTimeLabel, &lv_font_montserrat_time_72);
+  lv_obj_set_style_text_font(timerAlertTimeLabel, &lv_font_montserrat_time_72, 0);
   lv_obj_set_style_text_align(timerAlertTimeLabel, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_t *dismiss = createTimerTextButton(timerAlertOverlay, l.dismiss,
                                             tr(STR_TIMER_DISMISS), timerDismissEvent, 0);
@@ -376,25 +376,6 @@ void refreshTimerTheme() {
         lv_obj_set_style_text_color(lv_obj_get_child(child, 0), themeTextOnAccent(), 0);
       } else lv_obj_set_style_text_color(child, done, 0);
     }
-  }
-  updateTimerPageText();
-}
-
-void refreshTimerTheme() {
-  if (!timerPage) return;
-  lv_obj_set_style_bg_color(timerPage, themePageBackground(), 0);
-  if (timerTimeLabel) lv_obj_set_style_text_color(timerTimeLabel, themeText(), 0);
-  if (timerStatusLabel) lv_obj_set_style_text_color(timerStatusLabel, themeTextDim(0xB8C0CC), 0);
-  const uint32_t count = lv_obj_get_child_cnt(timerPage);
-  for (uint32_t i = 0; i < count; ++i) {
-    lv_obj_t *child = lv_obj_get_child(timerPage, i);
-    if (!lv_obj_check_type(child, &lv_btn_class)) continue;
-    lv_obj_set_style_bg_color(child, lv_color_hex(themeSurface(0x0A0A0A)), LV_PART_MAIN);
-    lv_obj_set_style_border_color(child, lv_color_hex(themeBorder(0x343846)), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(child, lv_color_hex(themeAccent(UI_ACCENT_AMBER)),
-                              LV_PART_MAIN | LV_STATE_PRESSED);
-    if (lv_obj_get_child_cnt(child))
-      lv_obj_set_style_text_color(lv_obj_get_child(child, 0), themeText(), 0);
   }
   updateTimerPageText();
 }
