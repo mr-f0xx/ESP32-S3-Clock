@@ -53,6 +53,20 @@ native = music.split('bool mountMusicSdNative() {', 1)[1].split('bool mountMusic
 assert 'SD_MMC.setPins(SD_SCLK_PIN, SD_MOSI_PIN, SD_MISO_PIN)' in native
 assert 'SD_MMC.begin("/sd", true, false, frequencyKhz, 10)' in native
 assert 'verifyMusicSdRoot()' in native
+# The card's D3 line must be HIGH at CMD0 or it enters SPI mode instead of SD
+# mode and sdmmc_init_ocr fails with 0x107. A weak internal pull-up is not a
+# substitute for driving it, so the handshake must set the pin as an output.
+assert 'pinMode(SD_CS_PIN, OUTPUT);' in native
+assert 'digitalWrite(SD_CS_PIN, HIGH);' in native
+assert 'INPUT_PULLUP' not in native
+
+# A failed mount must say whether anything in the slot responds at all.
+assert 'void logSdCardSpiPresence()' in music
+assert 'logSdCardSpiPresence();' in music
+probe = music.split('void logSdCardSpiPresence() {', 1)[1].split('void unmountMusicSd', 1)[0]
+assert '0x40, 0x00, 0x00, 0x00, 0x00, 0x95' in probe  # CMD0 with CRC7
+assert 'no card is driving MISO' in probe
+assert 'answered in SPI mode' in probe
 
 spi = music.split('bool mountMusicSdSpi() {', 1)[1].split('bool remountMusicSd()', 1)[0]
 assert 'for (uint32_t frequency : MUSIC_SD_MOUNT_FREQUENCIES)' in spi

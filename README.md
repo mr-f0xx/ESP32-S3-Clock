@@ -107,9 +107,19 @@ The last launcher page contains a calculator, notes, and a stopwatch. The calcul
 /video/rotated/             竖屏预旋转视频
 ```
 
-TF 卡请使用 FAT32（exFAT 不受支持，插卡后提示 SD 不可用通常就是这个原因）。固件先通过 SDMMC 主机以 1 位模式（CMD 1 / CLK 2 / D0 3，依次以 20、4 MHz 重试）挂载，失败后再回退到 SPI3（MOSI 1 / SCLK 2 / MISO 3 / CS 41，依次以 20、4、1 MHz 重试）；两种方式都会校验 FAT 根目录，并在串口输出所用接口、卡类型和容量。如果两个接口都失败，串口会打印 `SD: card did not mount (SDMMC 1-bit: failed, SPI3: failed)`：请检查卡是否为 FAT32、重新插拔后在 Notes 中点 **Refresh**，或查看该行上方的 `sdmmc_card_init` 错误码（0x107 表示卡无响应/未插好，0x108 表示超时）。
+TF 卡请使用 FAT32（exFAT 不受支持，插卡后提示 SD 不可用通常就是这个原因）。固件先通过 SDMMC 主机以 1 位模式（CMD 1 / CLK 2 / D0 3，依次以 20、4 MHz 重试）挂载，失败后再回退到 SPI3（MOSI 1 / SCLK 2 / MISO 3 / CS 41，依次以 20、4、1 MHz 重试）；两种方式都会校验 FAT 根目录，并在串口输出所用接口、卡类型和容量。如果两个接口都失败，串口会打印 `SD: card did not mount (SDMMC 1-bit: failed, SPI3: failed)`，紧接着是 `SD probe:` 诊断行，它区分两种完全不同的故障：
 
-The card must be FAT32; exFAT is not supported and is the usual reason a freshly formatted card reports SD unavailable. Firmware mounts the slot on the native SDMMC host in 1-bit mode first (CMD 1 / CLK 2 / D0 3, retried at 20 and 4 MHz) and falls back to SPI3 (MOSI 1 / SCLK 2 / MISO 3 / CS 41, retried at 20/4/1 MHz). Both paths verify the FAT root and log the transport, card type and capacity. If both fail, the log shows `SD: card did not mount (SDMMC 1-bit: failed, SPI3: failed)`: check that the card is FAT32, reinsert it and tap **Refresh** in Notes, or read the `sdmmc_card_init` error code just above that line (0x107 = no response / card not seated, 0x108 = timeout).
+- `SD probe: no card is driving MISO (absent, unseated or unpowered)`——卡根本没有应答，属于接触/供电/硬件问题，重新格式化没有意义，请换一张卡或检查卡座。
+- `SD probe: card answered in SPI mode (R1=0x..); it is alive but SD-mode signalling fails`——卡是好的，只是 SD 模式握手失败。SD 规范要求 D3（GPIO41）在 CMD0 时必须为高，否则卡会进入 SPI 模式，`sdmmc_init_ocr` 便以 0x107 超时；固件已把该线驱动为输出高电平。
+
+`sdmmc_card_init` 的 0x107 表示 `send_op_cond` 超时（卡未应答 ACMD41）；0x108 则是命令阶段超时。
+
+The card must be FAT32; exFAT is not supported and is the usual reason a freshly formatted card reports SD unavailable. Firmware mounts the slot on the native SDMMC host in 1-bit mode first (CMD 1 / CLK 2 / D0 3, retried at 20 and 4 MHz) and falls back to SPI3 (MOSI 1 / SCLK 2 / MISO 3 / CS 41, retried at 20/4/1 MHz). Both paths verify the FAT root and log the transport, card type and capacity. If both fail, the log shows `SD: card did not mount (SDMMC 1-bit: failed, SPI3: failed)` followed by an `SD probe:` line, which separates two very different faults:
+
+- `SD probe: no card is driving MISO (absent, unseated or unpowered)` — nothing answered, so this is a contact, power or hardware fault; reformatting cannot help. Try another card and inspect the slot.
+- `SD probe: card answered in SPI mode (R1=0x..); it is alive but SD-mode signalling fails` — the card works but SD-mode handshaking fails. The SD spec requires D3 (GPIO41) to be HIGH during CMD0, otherwise the card enters SPI mode and `sdmmc_init_ocr` times out with 0x107; the firmware now drives that line as an output high.
+
+A `sdmmc_card_init` code of 0x107 means `send_op_cond` timed out (the card never answered ACMD41).
 
 转换完成的 JWP 已按天气类型和屏幕方向保存在 [`tfcard/wallpaper`](tfcard/wallpaper)，并由 Git LFS 管理。需要完整下载源码和壁纸时先安装 Git LFS，再执行：
 
