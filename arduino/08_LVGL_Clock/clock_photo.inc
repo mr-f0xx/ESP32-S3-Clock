@@ -40,8 +40,8 @@ void scanPhotoFiles() {
   photoFrameScanned = false;
   photoLastScanAt = millis();
   if (!photoSdReady()) return;
-  const char *scanPath = SD.exists("/photos") ? "/photos" : "/";
-  File directory = SD.open(scanPath);
+  const char *scanPath = storageFs().exists("/photos") ? "/photos" : "/";
+  File directory = storageFs().open(scanPath);
   if (!directory || !directory.isDirectory()) {
     if (directory) directory.close();
     return;
@@ -90,7 +90,7 @@ bool ensurePhotoBuffer() {
 // Decode a JPEG into the 480x480 frame buffer using a center square crop.
 bool loadPhotoToFrame(const String &path) {
   if (!ensurePhotoBuffer()) return false;
-  File file = SD.open(path, FILE_READ);
+  File file = storageFs().open(path, FILE_READ);
   if (!file) return false;
   const size_t fileSize = file.size();
   if (!fileSize || fileSize > PHOTO_MAX_JPEG_BYTES) {

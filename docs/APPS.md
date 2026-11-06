@@ -84,7 +84,11 @@ standby. They use the existing theme palette and the shared 56 px back button.
   is available. Without a card, one local fallback note can still be saved in NVS;
   an SD-backed note never silently falls back to a different local file.
 - **Refresh** forces a remount, useful after reinserting the card. The same mount
-  path is shared with music/audiobooks/photos and retries 20/4/1 MHz on SPI3.
+  path is shared with music/audiobooks/photos and every other TF consumer. It
+  tries the native 1-bit SDMMC host first (CMD 1 / CLK 2 / D0 3, 20 then 4 MHz)
+  and falls back to SPI3 (MOSI 1 / SCLK 2 / MISO 3 / CS 41, 20/4/1 MHz); all
+  callers read through one active-transport handle, and a card inserted while the
+  clock runs is re-probed automatically without tapping **Refresh**.
 
 ## WiFi / RF HUD
 

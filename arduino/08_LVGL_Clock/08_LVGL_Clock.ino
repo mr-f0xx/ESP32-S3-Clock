@@ -7,6 +7,7 @@
 #include <LittleFS.h>
 #include <SPI.h>
 #include <SD.h>
+#include <SD_MMC.h>
 #include <time.h>
 #include <esp_heap_caps.h>
 #include <esp_sleep.h>
@@ -16,7 +17,6 @@
 #include <freertos/semphr.h>
 #include <mbedtls/ssl.h>
 #include "esp_sntp.h"
-#include <AudioFileSourceSD.h>
 #include <AudioFileSourceHTTPStream.h>
 #include <AudioFileSourceICYStream.h>
 #include <AudioFileSourceBuffer.h>
@@ -559,10 +559,13 @@ void selectAdjacentPhoto(int8_t direction);
 void openUtilityApp(uint8_t app);
 void serviceUtilityApps();
 // Shared SD owner lives in clock_music.inc, which is included after the
-// utilities. Notes uses the same SPI3/FAT mount path as music and audiobooks.
+// utilities. Notes uses the same mount path as music and audiobooks, and every
+// caller reaches the card through storageFs() so the native SDMMC and SPI3
+// transports stay interchangeable.
 bool mountMusicSd();
 bool remountMusicSd();
 void unmountMusicSd();
+fs::FS &storageFs();
 void stopMusicPlayback();
 void createTimerPage(lv_obj_t *screen);
 void showTimerPage(bool fade = true);

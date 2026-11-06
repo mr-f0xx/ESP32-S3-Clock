@@ -44,7 +44,7 @@ bool samplerAllocate() {
 }
 bool loadSamplerWav(uint8_t pad, const char *path) {
   if (pad >= SAMPLER_PADS || !samplerBanks[pad].samples || !extSdReady()) return false;
-  File file = SD.open(path, FILE_READ);
+  File file = storageFs().open(path, FILE_READ);
   if (!file || file.size() < 44 || file.size() > 64UL * 1024UL * 1024UL) { if (file) file.close(); return false; }
   uint8_t header[12];
   if (file.read(header, 12) != 12 || memcmp(header, "RIFF", 4) || memcmp(header + 8, "WAVE", 4)) { file.close(); return false; }
@@ -98,7 +98,7 @@ void samplerLoadAll() {
   uint8_t loaded = 0;
   for (uint8_t i = 0; i < SAMPLER_PADS; ++i) {
     char path[40]; snprintf(path, sizeof(path), "/samples/%02u.wav", i + 1);
-    if (SD.exists(path) && loadSamplerWav(i, path)) ++loaded;
+    if (storageFs().exists(path) && loadSamplerWav(i, path)) ++loaded;
     lv_timer_handler();
   }
   if (samplerStatus) lv_label_set_text_fmt(samplerStatus, "%u / 16 pads loaded - /samples/01.wav ... 16.wav", loaded);
@@ -172,9 +172,9 @@ void samplerActionEvent(lv_event_t *event) {
   else if (action == 3) {
     samplerPitch = 65536; samplerCutoff = 32768; samplerUpdateEffects();
   } else if (action == 4 && !samplerRecording && extSdReady() && samplerBanks[samplerSelected].count) {
-    if (!SD.exists("/samples")) SD.mkdir("/samples");
+    if (!storageFs().exists("/samples")) storageFs().mkdir("/samples");
     char path[40]; snprintf(path, sizeof(path), "/samples/%02u.wav", samplerSelected + 1);
-    File file = SD.open(path, FILE_WRITE);
+    File file = storageFs().open(path, FILE_WRITE);
     if (file) {
       uint8_t header[44]; recorderWavHeader(header, samplerBanks[samplerSelected].count * 2);
       // Sampler recordings are mono: rewrite channel count and byte rate.

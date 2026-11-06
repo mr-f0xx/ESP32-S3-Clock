@@ -70,7 +70,7 @@ void vaultRandom(uint8_t *bytes, size_t length) {
 }
 bool vaultWriteEncrypted(const uint8_t *plain, size_t length) {
   if (!vaultUnlocked || !extSdReady()) return false;
-  if (!SD.exists("/vault")) SD.mkdir("/vault");
+  if (!storageFs().exists("/vault")) storageFs().mkdir("/vault");
   uint8_t nonce[VaultCrypto::VAULT_NONCE_BYTES]; vaultRandom(nonce, sizeof(nonce));
   uint8_t *container = static_cast<uint8_t *>(heap_caps_malloc(VaultCrypto::VAULT_MAX_FILE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!container) return false;
@@ -80,18 +80,18 @@ bool vaultWriteEncrypted(const uint8_t *plain, size_t length) {
   VaultCrypto::wipe(nonce, sizeof(nonce));
   bool written = false;
   if (sealed) {
-    File file = SD.open("/vault/passwords.new", FILE_WRITE);
+    File file = storageFs().open("/vault/passwords.new", FILE_WRITE);
     if (file) {
       written = file.write(container, containerLength) == containerLength;
       file.flush(); file.close();
     }
     if (written) {
-      if (SD.exists("/vault/passwords.bak")) SD.remove("/vault/passwords.bak");
-      if (SD.exists("/vault/passwords.bin")) SD.rename("/vault/passwords.bin", "/vault/passwords.bak");
-      written = SD.rename("/vault/passwords.new", "/vault/passwords.bin");
+      if (storageFs().exists("/vault/passwords.bak")) storageFs().remove("/vault/passwords.bak");
+      if (storageFs().exists("/vault/passwords.bin")) storageFs().rename("/vault/passwords.bin", "/vault/passwords.bak");
+      written = storageFs().rename("/vault/passwords.new", "/vault/passwords.bin");
       if (written) vaultExists = true;
     }
-    if (!written) SD.remove("/vault/passwords.new");
+    if (!written) storageFs().remove("/vault/passwords.new");
   }
   VaultCrypto::wipe(container, VaultCrypto::VAULT_MAX_FILE); free(container);
   return written;
@@ -127,7 +127,7 @@ bool vaultUnlockOrCreate(bool create) {
   if (!plain) { vaultStatusText("Not enough PSRAM"); return false; }
   bool success = false;
   if (create) {
-    if (SD.exists("/vault/passwords.bin")) { free(plain); vaultExists = true; vaultStatusText("Vault already exists - unlock it instead"); return false; }
+    if (storageFs().exists("/vault/passwords.bin")) { free(plain); vaultExists = true; vaultStatusText("Vault already exists - unlock it instead"); return false; }
     vaultRandom(vaultSalt, sizeof(vaultSalt));
     success = VaultCrypto::deriveKey(pin, strlen(pin), vaultSalt, VaultCrypto::VAULT_KDF_ITERATIONS, vaultKey);
     if (success) {
@@ -138,8 +138,8 @@ bool vaultUnlockOrCreate(bool create) {
       if (!success) vaultUnlocked = false;
     }
   } else {
-    File file = SD.open("/vault/passwords.bin", FILE_READ);
-    if (!file) { if (SD.exists("/vault/passwords.bak")) file = SD.open("/vault/passwords.bak", FILE_READ); }
+    File file = storageFs().open("/vault/passwords.bin", FILE_READ);
+    if (!file) { if (storageFs().exists("/vault/passwords.bak")) file = storageFs().open("/vault/passwords.bak", FILE_READ); }
     if (file && file.size() <= VaultCrypto::VAULT_MAX_FILE) {
       uint8_t *container = static_cast<uint8_t *>(heap_caps_malloc(file.size(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
       if (container && file.read(container, file.size()) == file.size()) {
@@ -309,7 +309,7 @@ void vaultActionEvent(lv_event_t *event) {
 void createVaultPage() {
   lv_obj_t *page = extPage(EXT_VAULT, "Password vault", 0xC5A3FF);
   vaultFrenchLayout = preferences.getBool("vault_fr", false);
-  vaultExists = extSdReady() && (SD.exists("/vault/passwords.bin") || SD.exists("/vault/passwords.bak"));
+  vaultExists = extSdReady() && (storageFs().exists("/vault/passwords.bin") || storageFs().exists("/vault/passwords.bak"));
   vaultStatus = extLabel(page, "AES-256-GCM on TF - USB typing requires confirmation", 24, 86, 432, 16);
   lv_obj_set_height(vaultStatus, 40);
   vaultLockPanel = lv_obj_create(page);
