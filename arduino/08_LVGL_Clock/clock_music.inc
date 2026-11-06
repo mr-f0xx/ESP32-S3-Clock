@@ -454,6 +454,40 @@ void rebuildMusicPlaylist() {
 bool mountMusicSdNative();
 bool mountMusicSdSpi();
 
+// A raw SPI CMD0 exchange, used only for diagnostics. It answers the
+// question the mount errors cannot: is anything in the slot responding at all?
+// 0xFF on MISO for every byte means no card is driving the bus (absent, not
+// seated, unpowered or a dead slot). A valid R1 (bit 7 clear) proves the card
+// is alive and entered SPI mode, which points at a signalling problem rather
+// than a missing card.
+void logSdCardSpiPresence() {
+  pinMode(SD_CS_PIN, OUTPUT);
+  digitalWrite(SD_CS_PIN, HIGH);
+  musicSdSpi.end();
+  if (!musicSdSpi.begin(SD_SCLK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN)) {
+    Serial.println("SD probe: SPI bus start failed");
+    return;
+  }
+  musicSdSpi.beginTransaction(SPISettings(400000, MSBFIRST, SPI_MODE0));
+  for (uint8_t i = 0; i < 10; ++i) musicSdSpi.transfer(0xFF);
+  digitalWrite(SD_CS_PIN, LOW);
+  const uint8_t cmd0[6] = {0x40, 0x00, 0x00, 0x00, 0x00, 0x95};
+  musicSdSpi.writeBytes(cmd0, sizeof(cmd0));
+  uint8_t r1 = 0xFF;
+  for (uint8_t i = 0; i < 16 && (r1 & 0x80); ++i) r1 = musicSdSpi.transfer(0xFF);
+  digitalWrite(SD_CS_PIN, HIGH);
+  musicSdSpi.transfer(0xFF);
+  musicSdSpi.endTransaction();
+  musicSdSpi.end();
+
+  if (r1 == 0xFF) {
+    Serial.println("SD probe: no card is driving MISO (absent, unseated or unpowered)");
+  } else {
+    Serial.printf("SD probe: card answered in SPI mode (R1=0x%02X); "
+                  "it is alive but SD-mode signalling fails\n", r1);
+  }
+}
+
 void unmountMusicSd() {
   if (musicSdTransport == SD_TRANSPORT_SDMMC) SD_MMC.end();
   else if (musicSdTransport == SD_TRANSPORT_SPI) SD.end();
@@ -491,17 +525,21 @@ bool mountMusicSd() {
   Serial.printf("SD: card did not mount (SDMMC 1-bit: %s, SPI3: %s)\n",
                 musicSdSdmmcFailed ? "failed" : "skipped",
                 musicSdSpiFailed ? "failed" : "skipped");
+  if (musicSdSdmmcFailed && musicSdSpiFailed) logSdCardSpiPresence();
   return false;
 }
 
 bool mountMusicSdNative() {
   // 1-bit SDMMC: CLK = GPIO2, CMD = GPIO1, D0 = GPIO3. GPIO41 is the card's
-  // D3/CS line; the vendor BSP mounts this slot in 1-bit mode and leaves that
-  // line alone, so hold it a pulled-up input instead of driving D3 push-pull
-  // while the SDMMC host owns the other three lines.
+  // D3 line. The SD spec requires D3 to be HIGH when CMD0 is sent: if it is
+  // low the card enters SPI mode instead of SD mode and every ACMD41 times
+  // out with 0x107 in sdmmc_init_ocr. A weak internal pull-up is not enough
+  // evidence of that level, so drive the line hard high for the handshake.
+  // GPIO41 is not a card-detect input on this board, so driving it is safe.
   SD_MMC.end();
   SD_MMC.setPins(SD_SCLK_PIN, SD_MOSI_PIN, SD_MISO_PIN);
-  pinMode(SD_CS_PIN, INPUT_PULLUP);
+  pinMode(SD_CS_PIN, OUTPUT);
+  digitalWrite(SD_CS_PIN, HIGH);
   delay(2);
 
   bool mounted = false;
@@ -520,7 +558,8 @@ bool mountMusicSdNative() {
     gpio_reset_pin(static_cast<gpio_num_t>(SD_SCLK_PIN));
     gpio_reset_pin(static_cast<gpio_num_t>(SD_MOSI_PIN));
     gpio_reset_pin(static_cast<gpio_num_t>(SD_MISO_PIN));
-    pinMode(SD_CS_PIN, INPUT_PULLUP);
+    pinMode(SD_CS_PIN, OUTPUT);
+    digitalWrite(SD_CS_PIN, HIGH);
     delay(20);
   }
   if (!mounted) {
