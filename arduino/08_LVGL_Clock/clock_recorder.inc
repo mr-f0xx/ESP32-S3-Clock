@@ -5,7 +5,7 @@ String recorderFiles[RECORDER_FILE_LIMIT];
 uint8_t recorderCount = 0, recorderIndex = 0, recorderListPage = 0;
 bool recorderRecording = false, recorderPlaying = false;
 File recorderFile;
-AudioFileSourceSD *recorderSource = nullptr;
+ClockSdFileSource *recorderSource = nullptr;
 AudioGeneratorWAV *recorderGenerator = nullptr;
 uint32_t recorderDataBytes = 0, recorderStartedAt = 0, recorderLastUiAt = 0;
 lv_obj_t *recorderStatus = nullptr, *recorderLevel = nullptr,
@@ -29,8 +29,8 @@ bool recorderWriteSink(const int16_t *samples, uint16_t frames) {
 void recorderScan() {
   recorderCount = 0;
   if (!extSdReady()) return;
-  if (!SD.exists("/memos")) SD.mkdir("/memos");
-  File directory = SD.open("/memos");
+  if (!storageFs().exists("/memos")) storageFs().mkdir("/memos");
+  File directory = storageFs().open("/memos");
   File entry;
   while (directory && recorderCount < RECORDER_FILE_LIMIT && (entry = directory.openNextFile())) {
     String name = entry.name();
@@ -78,20 +78,20 @@ bool recorderStart() {
     if (recorderStatus) lv_label_set_text(recorderStatus, "Insert / unlock the TF card first");
     return false;
   }
-  if (!SD.exists("/memos")) SD.mkdir("/memos");
+  if (!storageFs().exists("/memos")) storageFs().mkdir("/memos");
   RTC_DateTime now;
   char path[64];
   if (rtcReady && readRtcTime(now))
     snprintf(path, sizeof(path), "/memos/%04u%02u%02u-%02u%02u%02u-%lu.wav",
       now.getYear(), now.getMonth(), now.getDay(), now.getHour(), now.getMinute(), now.getSecond(), millis());
   else snprintf(path, sizeof(path), "/memos/memo-%lu.wav", millis());
-  recorderFile = SD.open(path, FILE_WRITE);
+  recorderFile = storageFs().open(path, FILE_WRITE);
   if (!recorderFile) return false;
   uint8_t header[44]; recorderWavHeader(header, 0);
   recorderFile.write(header, 44);
   recorderDataBytes = 0;
   if (!beginMicrophoneCapture(recorderWriteSink)) {
-    recorderFile.close(); SD.remove(path);
+    recorderFile.close(); storageFs().remove(path);
     if (recorderStatus) lv_label_set_text(recorderStatus, "ES7210 microphone unavailable (I2C 0x40 / I2S RX)");
     return false;
   }
@@ -103,7 +103,7 @@ bool recorderStart() {
 bool recorderPlay(uint8_t index) {
   stopExtensionAudio(); stopMusicPlayback(); stopAudiobookPlayback(); stopRadioPlayback();
   if (index >= recorderCount || !extSdReady()) return false;
-  recorderSource = new AudioFileSourceSD(recorderFiles[index].c_str());
+  recorderSource = new ClockSdFileSource(recorderFiles[index].c_str());
   if (!recorderSource->isOpen() || !initializeMusicCodec()) { stopRecorderActivity(); return false; }
   recorderGenerator = new AudioGeneratorWAV();
   if (!recorderGenerator->begin(recorderSource, musicOutput)) { stopRecorderActivity(); return false; }
@@ -133,7 +133,7 @@ void recorderActionEvent(lv_event_t *event) {
   else if (action == 2) { recorderListPage = max(0, static_cast<int>(recorderListPage) - 1); recorderUpdateRows(); }
   else if (action == 3) { if ((recorderListPage + 1) * 5 < recorderCount) ++recorderListPage; recorderUpdateRows(); }
   else if (action == 4 && !recorderBusy() && recorderIndex < recorderCount && extSdReady()) {
-    SD.remove(recorderFiles[recorderIndex].c_str()); recorderScan(); recorderUpdateRows();
+    storageFs().remove(recorderFiles[recorderIndex].c_str()); recorderScan(); recorderUpdateRows();
   }
 }
 void createRecorderPage() {

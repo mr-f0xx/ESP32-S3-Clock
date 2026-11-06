@@ -28,7 +28,7 @@ class SubsonicHttpSource : public AudioFileSource {
     const bool tls = savedUrl.startsWith("https://");
     if (tls) {
       if (!extSdReady()) return false;
-      File ca = SD.open("/subsonic-ca.pem", FILE_READ);
+      File ca = storageFs().open("/subsonic-ca.pem", FILE_READ);
       if (!ca || ca.size() > 16384) { if (ca) ca.close(); return false; }
       rootCa = static_cast<char *>(heap_caps_malloc(ca.size() + 1, MALLOC_CAP_SPIRAM));
       if (!rootCa) { ca.close(); return false; }

@@ -16,7 +16,7 @@ uint8_t audiobookTrackCount = 0;
 uint8_t audiobookTrackIndex = 0;
 bool audiobookPaused = false;
 bool audiobookIsMp3 = false;
-AudioFileSourceSD *audiobookSource = nullptr;
+ClockSdFileSource *audiobookSource = nullptr;
 AudioGenerator *audiobookGenerator = nullptr;
 uint32_t audiobookLastSaveAt = 0;
 uint32_t audiobookProgressLastUpdateAt = 0;
@@ -261,11 +261,11 @@ void scanAudiobooks() {
     return;
   }
 
-  if (!SD.exists("/audiobooks")) {
+  if (!storageFs().exists("/audiobooks")) {
     setAudiobookStatus(STR_AUDIOBOOK_FOLDER_HINT);
     return;
   }
-  File directory = SD.open("/audiobooks");
+  File directory = storageFs().open("/audiobooks");
   if (!directory || !directory.isDirectory()) {
     if (directory) directory.close();
     setAudiobookStatus(STR_CANNOT_OPEN_BOOK_FOLDER);
@@ -348,7 +348,7 @@ bool startAudiobook(uint8_t index, bool resume) {
   audiobookIsMp3 = lower.endsWith(".mp3");
   const uint32_t resumeBytes = resume ? audiobookLoadResume(path) : 0;
 
-  audiobookSource = new AudioFileSourceSD(path.c_str());
+  audiobookSource = new ClockSdFileSource(path.c_str());
   if (!audiobookSource || !audiobookSource->isOpen()) {
     Serial.printf("Audiobooks: cannot open %s\n", path.c_str());
     stopAudiobookPlayback();

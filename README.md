@@ -107,9 +107,9 @@ The last launcher page contains a calculator, notes, and a stopwatch. The calcul
 /video/rotated/             竖屏预旋转视频
 ```
 
-TF 卡使用 FAT32。固件在 SPI3（MOSI 1 / SCLK 2 / MISO 3 / CS 41）上依次以 20、4、1 MHz 重试挂载，并在串口输出卡类型/容量；如果仍提示 SD 不可用，请重新插拔卡后在 Notes 中点 **Refresh**，或检查串口日志。
+TF 卡请使用 FAT32（exFAT 不受支持，插卡后提示 SD 不可用通常就是这个原因）。固件先通过 SDMMC 主机以 1 位模式（CMD 1 / CLK 2 / D0 3，依次以 20、4 MHz 重试）挂载，失败后再回退到 SPI3（MOSI 1 / SCLK 2 / MISO 3 / CS 41，依次以 20、4、1 MHz 重试）；两种方式都会校验 FAT 根目录，并在串口输出所用接口、卡类型和容量。如果两个接口都失败，串口会打印 `SD: card did not mount (SDMMC 1-bit: failed, SPI3: failed)`：请检查卡是否为 FAT32、重新插拔后在 Notes 中点 **Refresh**，或查看该行上方的 `sdmmc_card_init` 错误码（0x107 表示卡无响应/未插好，0x108 表示超时）。
 
-The card must be FAT32. Firmware retries the SPI3 mount at 20/4/1 MHz and logs card type/size; if it still reports SD unavailable, reinsert the card and tap **Refresh** in Notes, or check the serial log.
+The card must be FAT32; exFAT is not supported and is the usual reason a freshly formatted card reports SD unavailable. Firmware mounts the slot on the native SDMMC host in 1-bit mode first (CMD 1 / CLK 2 / D0 3, retried at 20 and 4 MHz) and falls back to SPI3 (MOSI 1 / SCLK 2 / MISO 3 / CS 41, retried at 20/4/1 MHz). Both paths verify the FAT root and log the transport, card type and capacity. If both fail, the log shows `SD: card did not mount (SDMMC 1-bit: failed, SPI3: failed)`: check that the card is FAT32, reinsert it and tap **Refresh** in Notes, or read the `sdmmc_card_init` error code just above that line (0x107 = no response / card not seated, 0x108 = timeout).
 
 转换完成的 JWP 已按天气类型和屏幕方向保存在 [`tfcard/wallpaper`](tfcard/wallpaper)，并由 Git LFS 管理。需要完整下载源码和壁纸时先安装 Git LFS，再执行：
 

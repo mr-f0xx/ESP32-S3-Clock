@@ -9,6 +9,11 @@ constexpr uint32_t MUSIC_SD_FREQUENCY = 20000000;
 constexpr uint32_t MUSIC_SD_MOUNT_FREQUENCIES[] = {
   MUSIC_SD_FREQUENCY, 4000000, 1000000
 };
+// The TF slot is wired to the SDMMC host (1-bit: CMD/CLK/D0 = GPIO1/2/3), so
+// the native peripheral is tried first. 20 MHz is the SD "default speed" cap
+// and matches the fastest SPI mount; fall back to 4 MHz for long or noisy
+// card wiring. SPI3 remains as the second-choice transport.
+constexpr uint32_t MUSIC_SD_SDMMC_FREQUENCIES_KHZ[] = {20000, 4000};
 constexpr uint32_t MUSIC_DEFAULT_SAMPLE_RATE = 44100;
 // Reserve I2S before the video DMA arena fragments internal SRAM. Keep the
 // v1.1.0 queue (10 x 1024 B = 2560 stereo frames, ~58 ms at 44.1 kHz): growing
@@ -27,16 +32,73 @@ uint32_t musicProgressLastUpdateAt = 0;
 // ESP32-S3, FSPI maps to that same host, so using it for SD corrupts later LCD
 // transactions (visible as a whole-screen color shift). Keep SD on SPI3_HOST.
 SPIClass musicSdSpi(HSPI);
+
+enum SdTransport : uint8_t {
+  SD_TRANSPORT_NONE = 0,
+  SD_TRANSPORT_SDMMC,
+  SD_TRANSPORT_SPI
+};
+
 String musicTracks[MUSIC_TRACK_LIMIT];
 String musicSuspendedTrackPath;
 uint8_t musicTrackCount = 0;
 uint8_t musicTrackIndex = 0;
 bool musicSdReady = false;
+SdTransport musicSdTransport = SD_TRANSPORT_NONE;
 uint32_t musicSdMountedFrequency = 0;
+// A transport that failed with the current card is not retried until the card
+// is removed (a remount request) so a dead transport cannot stall every mount.
+// After MUSIC_SD_REPROBE_MS both are retried anyway, so a card inserted while
+// the clock runs is picked up without opening an app and tapping Refresh.
+constexpr uint32_t MUSIC_SD_REPROBE_MS = 5000;
+bool musicSdSdmmcFailed = false;
+bool musicSdSpiFailed = false;
+uint32_t musicSdLastProbeAt = 0;
+
+// Every SD access in the firmware goes through storageFs(), so the same file
+// API works whether the card answered on the native SDMMC host or over SPI3.
+// Do not call SD.<op>() or SD_MMC.<op>() directly: the inactive transport
+// silently reports "no file" and makes a mounted card look empty.
+fs::FS &storageFs() {
+  return musicSdTransport == SD_TRANSPORT_SDMMC ? static_cast<fs::FS &>(SD_MMC)
+                                                : static_cast<fs::FS &>(SD);
+}
+
+// Music and audiobook sources must read through the active transport too.
+class ClockSdFileSource : public AudioFileSource {
+ public:
+  explicit ClockSdFileSource(const char *filename) { open(filename); }
+
+  bool open(const char *filename) override {
+    file = storageFs().open(filename, FILE_READ);
+    return file ? true : false;
+  }
+  uint32_t read(void *data, uint32_t len) override {
+    return file.read(reinterpret_cast<uint8_t *>(data), len);
+  }
+  bool seek(int32_t pos, int dir) override {
+    if (!file) return false;
+    if (dir == SEEK_SET) return file.seek(pos);
+    if (dir == SEEK_CUR) return file.seek(file.position() + pos);
+    if (dir == SEEK_END) return file.seek(file.size() + pos);
+    return false;
+  }
+  bool close() override {
+    file.close();
+    return true;
+  }
+  bool isOpen() override { return file ? true : false; }
+  uint32_t getSize() override { return file ? file.size() : 0; }
+  uint32_t getPos() override { return file ? file.position() : 0; }
+
+ private:
+  File file;
+};
+
 bool musicCodecReady = false;
 bool musicPaused = false;
 es8311_handle_t musicCodec = nullptr;
-AudioFileSourceSD *musicSource = nullptr;
+ClockSdFileSource *musicSource = nullptr;
 AudioGenerator *musicGenerator = nullptr;
 bool videoAudioActive = false;
 bool videoAudioRestartRequested = false;
@@ -389,17 +451,101 @@ void rebuildMusicPlaylist() {
   refreshMusicPlaylistStyles();
 }
 
+bool mountMusicSdNative();
+bool mountMusicSdSpi();
+
 void unmountMusicSd() {
-  SD.end();
+  if (musicSdTransport == SD_TRANSPORT_SDMMC) SD_MMC.end();
+  else if (musicSdTransport == SD_TRANSPORT_SPI) SD.end();
   musicSdSpi.end();
   pinMode(SD_CS_PIN, OUTPUT);
   digitalWrite(SD_CS_PIN, HIGH);
   musicSdReady = false;
+  musicSdTransport = SD_TRANSPORT_NONE;
   musicSdMountedFrequency = 0;
+  // A deliberate remount follows a card swap or a user-visible Refresh, so let
+  // both transports be tried again for the card that is in the slot now.
+  musicSdSdmmcFailed = false;
+  musicSdSpiFailed = false;
+  musicSdLastProbeAt = 0;
+}
+
+bool verifyMusicSdRoot() {
+  File root = storageFs().open("/");
+  const bool rootOk = root && root.isDirectory();
+  if (root) root.close();
+  return rootOk;
 }
 
 bool mountMusicSd() {
   if (musicSdReady) return true;
+  if (musicSdSdmmcFailed && musicSdSpiFailed &&
+      millis() - musicSdLastProbeAt < MUSIC_SD_REPROBE_MS) return false;
+  // The TF slot on this board is wired to the SDMMC host (CMD/CLK/D0 = GPIO
+  // 1/2/3), and the native 1-bit mount is both faster and more tolerant than
+  // bit-banging the same lines over SPI3. Try it first, then fall back to the
+  // SPI3 path so a card that only answers in SPI mode still mounts.
+  if (!musicSdSdmmcFailed && mountMusicSdNative()) return true;
+  if (!musicSdSpiFailed && mountMusicSdSpi()) return true;
+  musicSdLastProbeAt = millis();
+  Serial.printf("SD: card did not mount (SDMMC 1-bit: %s, SPI3: %s)\n",
+                musicSdSdmmcFailed ? "failed" : "skipped",
+                musicSdSpiFailed ? "failed" : "skipped");
+  return false;
+}
+
+bool mountMusicSdNative() {
+  // 1-bit SDMMC: CLK = GPIO2, CMD = GPIO1, D0 = GPIO3. GPIO41 is the card's
+  // D3/CS line; the vendor BSP mounts this slot in 1-bit mode and leaves that
+  // line alone, so hold it a pulled-up input instead of driving D3 push-pull
+  // while the SDMMC host owns the other three lines.
+  SD_MMC.end();
+  SD_MMC.setPins(SD_SCLK_PIN, SD_MOSI_PIN, SD_MISO_PIN);
+  pinMode(SD_CS_PIN, INPUT_PULLUP);
+  delay(2);
+
+  bool mounted = false;
+  for (uint32_t frequencyKhz : MUSIC_SD_SDMMC_FREQUENCIES_KHZ) {
+    mounted = SD_MMC.begin("/sd", true, false, frequencyKhz, 10);
+    if (mounted) {
+      musicSdMountedFrequency = frequencyKhz * 1000UL;
+      break;
+    }
+    // The core already logged the sdmmc_card_init error code; the codes that
+    // matter here are 0x107 (no response / card absent or unpowered) and
+    // 0x108 (timeout).
+    Serial.printf("SD: SDMMC 1-bit mount failed at %lu kHz\n",
+                  static_cast<unsigned long>(frequencyKhz));
+    SD_MMC.end();
+    gpio_reset_pin(static_cast<gpio_num_t>(SD_SCLK_PIN));
+    gpio_reset_pin(static_cast<gpio_num_t>(SD_MOSI_PIN));
+    gpio_reset_pin(static_cast<gpio_num_t>(SD_MISO_PIN));
+    pinMode(SD_CS_PIN, INPUT_PULLUP);
+    delay(20);
+  }
+  if (!mounted) {
+    musicSdSdmmcFailed = true;
+    return false;
+  }
+
+  // Keep the transport selected while probing the root directory: the FAT
+  // volume lives in the mounted filesystem, not in the transport alone.
+  musicSdTransport = SD_TRANSPORT_SDMMC;
+  if (verifyMusicSdRoot()) {
+    musicSdReady = true;
+    Serial.printf("SD: mounted 1-bit SDMMC type=%u size=%llu MiB at %lu kHz\n",
+                  static_cast<unsigned>(SD_MMC.cardType()),
+                  static_cast<unsigned long long>(SD_MMC.cardSize() / 1048576ULL),
+                  static_cast<unsigned long>(musicSdMountedFrequency / 1000UL));
+    return true;
+  }
+  Serial.println("SD: SDMMC card answered but the FAT root is unreadable");
+  SD_MMC.end();
+  musicSdTransport = SD_TRANSPORT_NONE;
+  return false;
+}
+
+bool mountMusicSdSpi() {
   for (uint32_t frequency : MUSIC_SD_MOUNT_FREQUENCIES) {
     // Start each attempt from a deselected card and a stopped SPI3 bus. The
     // Arduino SD core performs the 400 kHz power-up sequence itself once the
@@ -415,19 +561,18 @@ bool mountMusicSd() {
       continue;
     }
     if (SD.begin(SD_CS_PIN, musicSdSpi, frequency, "/sd", 10, false)) {
-      File root = SD.open("/");
-      const bool rootOk = root && root.isDirectory();
-      if (root) root.close();
-      if (rootOk) {
+      musicSdTransport = SD_TRANSPORT_SPI;
+      musicSdMountedFrequency = frequency;
+      if (verifyMusicSdRoot()) {
         musicSdReady = true;
-        musicSdMountedFrequency = frequency;
-        Serial.printf("SD: mounted type=%u size=%llu MiB at %lu Hz\n",
+        Serial.printf("SD: mounted SPI3 type=%u size=%llu MiB at %lu Hz\n",
                       static_cast<unsigned>(SD.cardType()),
                       static_cast<unsigned long long>(SD.cardSize() / 1048576ULL),
                       static_cast<unsigned long>(frequency));
         return true;
       }
       Serial.println("SD: FAT mounted but root directory is unreadable");
+      musicSdTransport = SD_TRANSPORT_NONE;
     } else {
       Serial.printf("SD: mount failed at %lu Hz\n",
                     static_cast<unsigned long>(frequency));
@@ -438,7 +583,8 @@ bool mountMusicSd() {
   }
   pinMode(SD_CS_PIN, OUTPUT);
   digitalWrite(SD_CS_PIN, HIGH);
-  Serial.println("SD: no usable FAT card after 20/4/1 MHz retries");
+  Serial.println("SD: no usable FAT card after 20/4/1 MHz SPI retries");
+  musicSdSpiFailed = true;
   return false;
 }
 
@@ -462,8 +608,8 @@ void scanMusicTracks() {
     return;
   }
 
-  const char *scanPath = SD.exists("/music") ? "/music" : "/";
-  File directory = SD.open(scanPath);
+  const char *scanPath = storageFs().exists("/music") ? "/music" : "/";
+  File directory = storageFs().open(scanPath);
   if (!directory || !directory.isDirectory()) {
     if (directory) directory.close();
     setMusicStatus(STR_CANNOT_OPEN_MUSIC_FOLDER);
@@ -688,11 +834,11 @@ bool startVideoAudioPlayback(const String &path, uint32_t positionMs) {
   else
     stopMusicPlayback();
   videoAudioRestartRequested = false;
-  if (!path.length() || !mountMusicSd() || !SD.exists(path.c_str())) {
+  if (!path.length() || !mountMusicSd() || !storageFs().exists(path.c_str())) {
     Serial.printf("Video audio: no sidecar %s\n", path.c_str());
     return false;
   }
-  musicSource = new AudioFileSourceSD(path.c_str());
+  musicSource = new ClockSdFileSource(path.c_str());
   if (!musicSource || !musicSource->isOpen()) {
     Serial.printf("Video audio: cannot open %s\n", path.c_str());
     stopMusicPlayback();
@@ -840,7 +986,7 @@ bool startMusicTrack(uint8_t index) {
   stopMusicPlayback();
   stopRadioPlayback();
   musicTrackIndex = index;
-  musicSource = new AudioFileSourceSD(musicTracks[musicTrackIndex].c_str());
+  musicSource = new ClockSdFileSource(musicTracks[musicTrackIndex].c_str());
   if (!musicSource || !musicSource->isOpen()) {
     Serial.printf("Music: cannot open %s\n",
                   musicTracks[musicTrackIndex].c_str());

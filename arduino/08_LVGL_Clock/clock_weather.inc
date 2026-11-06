@@ -1235,12 +1235,12 @@ bool scanWeatherWallpapers() {
   mediaScanCapacityDrops = 0;
   // Videos are user content and must not disappear merely because a large
   // wallpaper library filled the fixed registry first.
-  File root = SD.open("/video");
+  File root = storageFs().open("/video");
   if (root && root.isDirectory()) {
     scanWallpaperDirectory(root);
   }
   if (root) root.close();
-  root = SD.open("/wallpaper");
+  root = storageFs().open("/wallpaper");
   if (root && root.isDirectory()) {
     scanWallpaperDirectory(root);
   }
@@ -1648,7 +1648,7 @@ bool openReaderAsset(File &file, WallpaperHeader &header, uint8_t index,
                   weatherWallpapers[index].path.c_str());
     return false;
   }
-  file = SD.open(path.c_str(), FILE_READ);
+  file = storageFs().open(path.c_str(), FILE_READ);
   if (!file) {
     reportPlaybackError(PlaybackErrorCode::OpenFile, path,
                         "cannot open file from TF card");

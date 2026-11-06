@@ -55,21 +55,21 @@ bool gbPersistSave() {
   if (!gbSaveDirty || !gbRam || !gbRamSize || !extSdReady()) return false;
   const String temporary = gbSavePath + ".tmp";
   const String backup = gbSavePath + ".bak";
-  File file = SD.open(temporary.c_str(), FILE_WRITE);
+  File file = storageFs().open(temporary.c_str(), FILE_WRITE);
   if (!file) return false;
   const size_t written = file.write(gbRam, gbRamSize);
   file.flush(); file.close();
-  if (written != gbRamSize) { SD.remove(temporary.c_str()); return false; }
-  if (SD.exists(backup.c_str())) SD.remove(backup.c_str());
-  if (SD.exists(gbSavePath.c_str())) SD.rename(gbSavePath.c_str(), backup.c_str());
-  if (!SD.rename(temporary.c_str(), gbSavePath.c_str())) return false;
+  if (written != gbRamSize) { storageFs().remove(temporary.c_str()); return false; }
+  if (storageFs().exists(backup.c_str())) storageFs().remove(backup.c_str());
+  if (storageFs().exists(gbSavePath.c_str())) storageFs().rename(gbSavePath.c_str(), backup.c_str());
+  if (!storageFs().rename(temporary.c_str(), gbSavePath.c_str())) return false;
   gbSaveDirty = false; return true;
 }
 void gbScanRoms() {
   gbRomCount = 0;
   if (!extSdReady()) return;
-  if (!SD.exists("/roms")) SD.mkdir("/roms");
-  File directory = SD.open("/roms"), entry;
+  if (!storageFs().exists("/roms")) storageFs().mkdir("/roms");
+  File directory = storageFs().open("/roms"), entry;
   while (directory && gbRomCount < GB_ROM_LIMIT && (entry = directory.openNextFile())) {
     String path = entry.path();
     String lower = path; lower.toLowerCase();
@@ -108,7 +108,7 @@ void gbBuildList() {
 bool gbLoadRom(const String &path) {
   gbPersistSave(); gbReleaseResources();
   if (!extSdReady()) return false;
-  File file = SD.open(path.c_str(), FILE_READ);
+  File file = storageFs().open(path.c_str(), FILE_READ);
   if (!file || file.size() < 32768 || file.size() > 8UL * 1024UL * 1024UL) { if (file) file.close(); return false; }
   gbRomSize = file.size();
   gbRom = static_cast<uint8_t *>(heap_caps_malloc(gbRomSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
@@ -138,10 +138,10 @@ bool gbLoadRom(const String &path) {
   gbRomPath = path; gbSavePath = path;
   gbSavePath.remove(gbSavePath.length() - 3); gbSavePath += ".sav";
   if (gbRamSize) {
-    File save = SD.open(gbSavePath.c_str(), FILE_READ);
+    File save = storageFs().open(gbSavePath.c_str(), FILE_READ);
     if (!save || save.size() != gbRamSize) {
       if (save) save.close();
-      save = SD.open((gbSavePath + ".bak").c_str(), FILE_READ);
+      save = storageFs().open((gbSavePath + ".bak").c_str(), FILE_READ);
     }
     if (save && save.size() == gbRamSize) save.read(gbRam, gbRamSize);
     if (save) save.close();

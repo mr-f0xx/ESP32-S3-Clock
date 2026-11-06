@@ -120,7 +120,7 @@ void setUtilityNoteStatus(const String &text) {
 
 // Notes writes/remounts the same FAT volume used by the SD audio players. Stop
 // those readers before a destructive SD operation instead of unmounting under
-// an open AudioFileSourceSD.
+// an open ClockSdFileSource.
 void utilityReleaseSdAudio() {
   stopMusicPlayback();
   stopAudiobookPlayback();
@@ -147,7 +147,7 @@ bool utilityNoteIsTextFile(const String &path) {
 
 bool utilityNoteReadFile(const String &path, String &text) {
   text = "";
-  File file = SD.open(path.c_str(), FILE_READ);
+  File file = storageFs().open(path.c_str(), FILE_READ);
   if (!file || file.isDirectory()) {
     if (file) file.close();
     return false;
@@ -178,32 +178,32 @@ bool utilityNoteWriteFileAtomic(const String &path, const String &text) {
   if (text.length() > UTILITY_NOTE_MAX_LENGTH) return false;
   const String temporary = path + ".tmp";
   const String backup = path + ".bak";
-  SD.remove(temporary.c_str());
-  File file = SD.open(temporary.c_str(), FILE_WRITE);
+  storageFs().remove(temporary.c_str());
+  File file = storageFs().open(temporary.c_str(), FILE_WRITE);
   if (!file) return false;
   const size_t written = file.print(text);
   file.flush();
   file.close();
   if (written != text.length()) {
-    SD.remove(temporary.c_str());
+    storageFs().remove(temporary.c_str());
     return false;
   }
   String verified;
   if (!utilityNoteReadFile(temporary, verified) || verified != text) {
-    SD.remove(temporary.c_str());
+    storageFs().remove(temporary.c_str());
     return false;
   }
-  const bool hadOriginal = SD.exists(path.c_str());
+  const bool hadOriginal = storageFs().exists(path.c_str());
   if (hadOriginal) {
-    SD.remove(backup.c_str());
-    if (!SD.rename(path.c_str(), backup.c_str())) {
-      SD.remove(temporary.c_str());
+    storageFs().remove(backup.c_str());
+    if (!storageFs().rename(path.c_str(), backup.c_str())) {
+      storageFs().remove(temporary.c_str());
       return false;
     }
   }
-  if (!SD.rename(temporary.c_str(), path.c_str())) {
-    if (hadOriginal) SD.rename(backup.c_str(), path.c_str());
-    SD.remove(temporary.c_str());
+  if (!storageFs().rename(temporary.c_str(), path.c_str())) {
+    if (hadOriginal) storageFs().rename(backup.c_str(), path.c_str());
+    storageFs().remove(temporary.c_str());
     return false;
   }
   return true;
@@ -211,8 +211,8 @@ bool utilityNoteWriteFileAtomic(const String &path, const String &text) {
 
 void utilityNoteScanLibrary() {
   utilityNoteCount = 0;
-  if (!SD.exists(UTILITY_NOTE_DIRECTORY) && !SD.mkdir(UTILITY_NOTE_DIRECTORY)) return;
-  File directory = SD.open(UTILITY_NOTE_DIRECTORY);
+  if (!storageFs().exists(UTILITY_NOTE_DIRECTORY) && !storageFs().mkdir(UTILITY_NOTE_DIRECTORY)) return;
+  File directory = storageFs().open(UTILITY_NOTE_DIRECTORY);
   if (!directory || !directory.isDirectory()) {
     if (directory) directory.close();
     return;
@@ -240,7 +240,7 @@ void utilityNoteScanLibrary() {
 
 bool utilityNoteMigrateLegacy(const String &legacy) {
   if (!legacy.length()) return true;
-  if (SD.exists(UTILITY_NOTE_LEGACY_FILE)) return true;
+  if (storageFs().exists(UTILITY_NOTE_LEGACY_FILE)) return true;
   if (!utilityNoteWriteFileAtomic(UTILITY_NOTE_LEGACY_FILE, legacy)) return false;
   String verified;
   if (!utilityNoteReadFile(UTILITY_NOTE_LEGACY_FILE, verified) || verified != legacy)
@@ -294,7 +294,7 @@ String utilityNoteNextPath() {
     char path[40];
     snprintf(path, sizeof(path), "%s/note-%03u.txt", UTILITY_NOTE_DIRECTORY,
              static_cast<unsigned>(index));
-    if (!SD.exists(path)) return String(path);
+    if (!storageFs().exists(path)) return String(path);
   }
   return String();
 }
